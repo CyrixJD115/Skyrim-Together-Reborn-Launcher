@@ -100,8 +100,7 @@ impl App {
                     self.progress = None;
                     self.step_label = "Preparing…".into();
                     self.push_log("── Starting install ──");
-                    let cfg = self.cfg.clone();
-                    pipe_task(move |tx| str_install::run(params, tx, cfg))
+                    pipe_task(move |tx| str_install::run(params, tx))
                 }
                 Err(e) => {
                     self.banner = Some(Banner::Error(e));
@@ -169,7 +168,7 @@ impl App {
                                     )
                                 }));
                                 if let Some(dir) = self.game_dir.clone() {
-                                    let manifest = str_install::manifest_for(&dir);
+                                    let manifest = config::InstallManifest::load(&dir);
                                     str_install::apply_summary_to_profile(
                                         &mut self.cfg,
                                         &summary,
