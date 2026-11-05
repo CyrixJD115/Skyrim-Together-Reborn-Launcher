@@ -72,6 +72,7 @@ pub enum Message {
     OpenFolder(OpenTarget),
     OpenLink(&'static str),
     DismissBanner,
+    ToggleChecks,
     ProfilePicked(usize),
     ProfileNew,
     ProfileDelete,
@@ -166,6 +167,9 @@ pub struct App {
     pub(crate) server_inputs: [String; 5], // port, name, password, max players, modcheck
     pub(crate) checking: bool,
     pub(crate) checks: Vec<crate::checks::Check>,
+    /// Launch-readiness checklist expanded? Collapsed by default — the
+    /// header row shows the summary either way.
+    pub(crate) show_checks: bool,
 }
 
 impl App {
@@ -198,6 +202,7 @@ impl App {
             server_inputs: Default::default(),
             checking: false,
             checks: Vec::new(),
+            show_checks: false,
         };
         (app, Task::perform(load(), |r| Message::Loaded(Box::new(r))))
     }

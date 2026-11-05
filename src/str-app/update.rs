@@ -430,6 +430,10 @@ impl App {
                 self.banner = None;
                 Task::none()
             }
+            Message::ToggleChecks => {
+                self.show_checks = !self.show_checks;
+                Task::none()
+            }
             Message::ProfilePicked(idx) => {
                 self.cfg.active_profile = idx.min(self.cfg.profiles.len().saturating_sub(1));
                 let active = self.cfg.active().clone();

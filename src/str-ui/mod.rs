@@ -68,10 +68,14 @@ fn panel_border() -> Border {
     }
 }
 
+/// How solid the content cards are (1.0 = opaque). Slightly translucent so
+/// the corner dragon in the background ghosts through them.
+pub const CARD_ALPHA: f32 = 0.92;
+
 pub fn card(theme: &iced::Theme) -> container::Style {
     let _ = theme;
     container::Style {
-        background: Some(Background::Color(CARD)),
+        background: Some(Background::Color(Color { a: CARD_ALPHA, ..CARD })),
         text_color: Some(TEXT),
         border: panel_border(),
         shadow: Shadow::default(),
@@ -82,7 +86,10 @@ pub fn card(theme: &iced::Theme) -> container::Style {
 pub fn card_flat(theme: &iced::Theme) -> container::Style {
     let _ = theme;
     container::Style {
-        background: Some(Background::Color(Color::from_rgb8(0x0e, 0x0d, 0x0b))),
+        background: Some(Background::Color(Color {
+            a: CARD_ALPHA,
+            ..Color::from_rgb8(0x0e, 0x0d, 0x0b)
+        })),
         text_color: Some(TEXT),
         border: Border {
             radius: 2.0.into(),

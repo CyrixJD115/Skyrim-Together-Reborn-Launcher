@@ -17,11 +17,16 @@ use crate::ui::{self, FONT_CINZEL, FONT_CINZEL_BOLD};
 
 /// The solid-white Skyrim Together dragon (vector), bundled into the binary.
 const LOGO_SVG: &[u8] = include_bytes!("../../assets/logo.svg");
-/// Same dragon, baked at ~5% opacity for the corner watermark.
+/// Corner-art variant of the dragon: same art, but with a tall empty margin
+/// above it so the oversized watermark can be cropped through empty space at
+/// the top while the art itself bleeds off the bottom/right window frame.
 const WATERMARK_SVG: &[u8] = include_bytes!("../../assets/watermark.svg");
 
 /// Content width shared by the header and every tab.
 const CONTENT_WIDTH: f32 = 820.0;
+
+/// How visible the corner dragon is (1.0 = solid white).
+const WATERMARK_OPACITY: f32 = 0.15;
 
 const TABS: [(Tab, &str); 4] = [
     (Tab::Client, "CLIENT"),
@@ -44,29 +49,43 @@ pub fn view(app: &App) -> Element<'_, Message> {
 
     root = root.push(tab_page(app));
 
-    // The dragon watermark sits behind nothing — it is layered *on top* of
-    // the UI but is fully transparent to mouse events (svg never captures
-    // them), so every click passes through to the widgets underneath.
-    let main = container(root)
+    // The dragon watermark is the *bottom layer* of the stack: the actual
+    // background the UI sits on, like the Skyrim main menu — cards and text
+    // render over it.
+    let main = container(iced::widget::stack![watermark(), root])
         .width(Length::Fill)
         .height(Length::Fill)
         .style(ui::screen);
 
-    iced::widget::stack![main, watermark()].into()
+    main.into()
 }
 
-/// A big, faint dragon emblem pinned to the bottom-right corner.
+/// The oversized dragon corner art: fills the bottom-right half of the
+/// window (flush with the frame) and is scaled with `Cover`, so it is larger
+/// than its area and the window frame crops it — the emblem bleeds off the
+/// bottom and the right edges, like the Skyrim menu's corner art. `Cover`
+/// crops symmetrically, and the watermark asset's tall empty top margin
+/// absorbs the top-side crop invisibly while pinning the art low.
 fn watermark() -> Element<'static, Message> {
     let dragon = svg(svg::Handle::from_memory(WATERMARK_SVG.to_vec()))
-        .width(Length::Fixed(230.0))
-        .height(Length::Fixed(338.0));
-    container(dragon)
+        .content_fit(iced::ContentFit::Cover)
+        .opacity(WATERMARK_OPACITY);
+    // Carve out the right-hand half of the window, then its bottom three
+    // fifths; the emblem fills that corner and overflows past it.
+    row![
+        space::horizontal(),
+        column![
+            space::vertical().height(Length::FillPortion(2)),
+            container(dragon)
+                .width(Length::Fill)
+                .height(Length::FillPortion(3)),
+        ]
         .width(Length::Fill)
-        .height(Length::Fill)
-        .align_x(iced::alignment::Horizontal::Right)
-        .align_y(iced::alignment::Vertical::Bottom)
-        .padding(iced::Padding { right: 30.0, bottom: 22.0, ..Default::default() })
-        .into()
+        .height(Length::Fill),
+    ]
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .into()
 }
 
 fn tab_page(app: &App) -> Element<'_, Message> {
