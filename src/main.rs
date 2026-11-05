@@ -5,27 +5,51 @@
 //! Cinzel headings, parchment-and-gold accents and the Skyrim Together dragon
 //! emblem.
 
+// Each `str-<group>/` directory below `src/` holds one area of the launcher;
+// `#[path]` keeps the crate-internal module names short (`crate::steam`,
+// `crate::config`, …) while the file tree stays grouped and hyphenated.
+#[path = "str-app/mod.rs"]
 mod app;
+#[path = "str-archive/mod.rs"]
 mod archive;
-mod cc_clean;
+#[path = "str-game/checks.rs"]
 mod checks;
+#[path = "str-game/cc_clean.rs"]
+mod cc_clean;
+#[path = "str-config/mod.rs"]
 mod config;
+#[path = "str-nexus/download.rs"]
 mod download;
+#[path = "str-launch/mod.rs"]
 mod launch;
+#[path = "str-nexus/mod.rs"]
 mod nexus;
+#[path = "str-config/paths.rs"]
 mod paths;
+#[path = "str-game/pe_version.rs"]
 mod pe_version;
+#[path = "str-platform/mod.rs"]
 mod platform;
+#[path = "str-game/plugins.rs"]
 mod plugins;
+#[path = "str-steam/proton.rs"]
 mod proton;
+#[path = "str-server/mod.rs"]
 mod server;
+#[path = "str-entry/sgdb.rs"]
 mod sgdb;
+#[path = "str-entry/shortcuts_vdf.rs"]
 mod shortcuts_vdf;
+#[path = "str-steam/mod.rs"]
 mod steam;
 #[cfg(all(unix, not(target_os = "macos")))]
+#[path = "str-entry/mod.rs"]
 mod steam_entry;
+#[path = "str-install/mod.rs"]
 mod str_install;
+#[path = "str-ui/mod.rs"]
 mod ui;
+#[path = "str-steam/vdf.rs"]
 mod vdf;
 
 /// The Skyrim Together dragon emblem (detailed), used for the window icon.

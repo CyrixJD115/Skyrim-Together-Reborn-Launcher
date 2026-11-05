@@ -405,7 +405,7 @@ mod tests {
     use super::*;
 
     fn fixture() -> Vec<u8> {
-        include_bytes!("../tests/fixtures/shortcuts.vdf").to_vec()
+        include_bytes!("../../tests/fixtures/shortcuts.vdf").to_vec()
     }
 
     fn celeste() -> ShortcutSpec {

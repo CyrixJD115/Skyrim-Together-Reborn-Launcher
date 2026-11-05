@@ -15,15 +15,15 @@
 use std::path::Path;
 
 /// 1920x620 — library detail page background.
-pub const HERO_PNG: &[u8] = include_bytes!("../assets/sgdb/hero.png");
+pub const HERO_PNG: &[u8] = include_bytes!("../../assets/sgdb/hero.png");
 /// 600x900 — Big Picture portrait box art.
-pub const GRID_PORTRAIT_PNG: &[u8] = include_bytes!("../assets/sgdb/grid_portrait.png");
+pub const GRID_PORTRAIT_PNG: &[u8] = include_bytes!("../../assets/sgdb/grid_portrait.png");
 /// 460x215 — classic library grid tile.
-pub const GRID_LANDSCAPE_PNG: &[u8] = include_bytes!("../assets/sgdb/grid_landscape.png");
+pub const GRID_LANDSCAPE_PNG: &[u8] = include_bytes!("../../assets/sgdb/grid_landscape.png");
 /// Transparent overlay shown on top of the grid/hero.
-pub const LOGO_PNG: &[u8] = include_bytes!("../assets/sgdb/logo.png");
+pub const LOGO_PNG: &[u8] = include_bytes!("../../assets/sgdb/logo.png");
 /// 256x256 — taskbar / in-library icon (recolored to white before writing).
-pub const ICON_PNG_RED: &[u8] = include_bytes!("../assets/sgdb/icon.png");
+pub const ICON_PNG_RED: &[u8] = include_bytes!("../../assets/sgdb/icon.png");
 
 /// The icon ships red; the launcher theme is white, so red-dominant pixels
 /// are remapped to their grayscale value at runtime (alpha is untouched and
