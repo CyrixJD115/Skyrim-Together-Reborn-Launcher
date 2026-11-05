@@ -33,8 +33,11 @@ pub fn launch_together(ctx: &LaunchContext) -> Result<(), String> {
 pub fn launch_vanilla(_ctx: &LaunchContext) -> Result<(), String> {
     // Launch through Steam; this bypasses the STR launcher replacement and any
     // manual launching, using the official launcher path.
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     std::process::Command::new("cmd")
         .args(["/C", "start", "", &format!("steam://rungameid/{SKYRIM_APPID}")])
+        .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("failed to open Steam: {e}"))

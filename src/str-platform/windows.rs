@@ -1,10 +1,15 @@
 //! Windows specifics: Steam discovery through the registry, STR's registry
 //! keys, Start Menu / desktop shortcuts and detached process launching.
 
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::platform::PlatformResult;
+
+/// `CREATE_NO_WINDOW`: keep console children (tasklist, cmd, …) from flashing
+/// a terminal window now that the app itself is a GUI-subsystem binary.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Steam install roots discovered through the Windows registry.
 pub fn steam_roots() -> Vec<PathBuf> {
@@ -49,6 +54,9 @@ pub fn write_str_registry(game_dir: &Path) -> PlatformResult<()> {
     Ok(())
 }
 
+/// The .lnk locations older builds used for their "Skyrim Together Reborn"
+/// shortcuts. Install no longer creates shortcuts (the STR Launcher tool is
+/// the way in), but Undo still cleans these up for previous installs.
 fn shortcut_paths(game_dir: &Path) -> Vec<(PathBuf, &'static str)> {
     let mut out = Vec::new();
     if let Ok(appdata) = std::env::var("APPDATA") {
@@ -71,44 +79,6 @@ fn shortcut_paths(game_dir: &Path) -> Vec<(PathBuf, &'static str)> {
     out
 }
 
-/// Create Start Menu + Desktop shortcuts pointing at SkyrimTogether.exe via
-/// PowerShell's WScript.Shell COM automation (no extra dependencies).
-pub fn create_shortcuts(game_dir: &Path) -> PlatformResult<Vec<String>> {
-    let target = game_dir.join("SkyrimTogether.exe");
-    if !target.is_file() {
-        return Err("SkyrimTogether.exe not found; install Skyrim Together Reborn first".into());
-    }
-    let target = target.to_string_lossy().replace('\'', "''");
-    let workdir = game_dir.to_string_lossy().replace('\'', "''");
-    let created = shortcut_paths(game_dir)
-        .into_iter()
-        .map(|(lnk, label)| -> PlatformResult<String> {
-            if let Some(parent) = lnk.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            let lnk_str = lnk.to_string_lossy().replace('\'', "''");
-            let ps = format!(
-                "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{lnk_str}');\
-                 $s.TargetPath='{target}';$s.WorkingDirectory='{workdir}';\
-                 $s.IconLocation='{target},0';$s.Description='Skyrim Together Reborn (via STR Launcher)';$s.Save()"
-            );
-            let out = Command::new("powershell")
-                .args(["-NoProfile", "-NonInteractive", "-Command", &ps])
-                .output()
-                .map_err(|e| format!("failed to run powershell: {e}"))?;
-            if !out.status.success() {
-                return Err(format!(
-                    "shortcut creation failed ({}): {}",
-                    label,
-                    String::from_utf8_lossy(&out.stderr).trim()
-                ));
-            }
-            Ok(label.to_string())
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(created)
-}
-
 pub fn remove_shortcuts(game_dir: &Path) {
     for (lnk, _) in shortcut_paths(game_dir) {
         let _ = std::fs::remove_file(lnk);
@@ -117,7 +87,6 @@ pub fn remove_shortcuts(game_dir: &Path) {
 
 /// Launch a program detached from our process.
 pub fn spawn_detached(program: &Path, args: &[&str], cwd: &Path) -> PlatformResult<()> {
-    use std::os::windows::process::CommandExt;
     const DETACHED_PROCESS: u32 = 0x0000_0008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
     Command::new(program)
@@ -133,6 +102,7 @@ pub fn spawn_detached(program: &Path, args: &[&str], cwd: &Path) -> PlatformResu
 pub fn steam_running() -> bool {
     let out = Command::new("tasklist")
         .args(["/FI", "IMAGENAME eq steam.exe", "/FO", "CSV", "/NH"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output();
     match out {
         Ok(o) => String::from_utf8_lossy(&o.stdout).contains("steam.exe"),

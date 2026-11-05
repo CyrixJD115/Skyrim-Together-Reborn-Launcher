@@ -85,8 +85,6 @@ pub struct Config {
     pub nexus_api_key: String,
     /// Back up and remove the bundled Creation Club plugins on install.
     pub clean_cc: bool,
-    /// Create Start Menu / desktop / applications shortcuts.
-    pub create_shortcuts: bool,
     /// How launching integrates with Steam / the game folder.
     pub launch_mode: LaunchMode,
     /// Cached download bookkeeping (per mod id -> file id).
@@ -103,7 +101,6 @@ impl Default for Config {
             active_profile: 0,
             nexus_api_key: String::new(),
             clean_cc: true,
-            create_shortcuts: true,
             launch_mode: LaunchMode::default(),
             cached_downloads: Default::default(),
         }

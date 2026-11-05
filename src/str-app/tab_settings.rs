@@ -84,12 +84,6 @@ pub fn settings_tab(app: &App) -> Element<'_, Message> {
             .on_toggle(Message::ToggleCleanCc)
             .style(ui::checkbox_style),
     );
-    game = game.push(
-        checkbox(app.cfg.create_shortcuts)
-            .label("Create Start Menu / desktop shortcuts")
-            .on_toggle(Message::ToggleShortcuts)
-            .style(ui::checkbox_style),
-    );
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         game = game.push(muted("Launch mode — how multiplayer starts:"));

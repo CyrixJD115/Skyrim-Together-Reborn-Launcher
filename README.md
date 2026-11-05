@@ -30,7 +30,7 @@ the official documentation:
 | STR finds `SkyrimSE.exe` (no picker dialog) | `HKCU\Software\TiltedPhoques\TiltedEvolution` registry keys | Proton prefix `user.reg` (`TitleExe` / `TitlePath`) |
 | Correct Proton | — | GE-Proton **10** selected for Skyrim in Steam (`config.vdf`), auto-downloaded if missing |
 | Launch via Steam starts multiplayer | — | Choose a **launch mode** (Settings): either launcher replacement (`SkyrimSELauncher.exe` → `SkyrimTogether.exe`, original kept as `_SkyrimSELauncher.exe`) + protonfixes localfix, **or** a separate *"Skyrim Together Reborn"* game in your Steam library with full SteamGridDB artwork (hero, grids, logo, recolored icon) |
-| Shortcuts | Start Menu + Desktop `.lnk` | Application entry + Desktop `.desktop` + standalone launch script with `STEAM_COMPAT_DATA_PATH` |
+| Shortcuts | — (the STR Launcher tool itself is the launcher; use **Launch Together**) | Application entry + Desktop `.desktop` + standalone launch script with `STEAM_COMPAT_DATA_PATH` |
 | Undo / uninstall | ✅ restores everything | ✅ restores everything (either mode) |
 
 The tool **never deletes** anything without keeping a backup: removed CC content

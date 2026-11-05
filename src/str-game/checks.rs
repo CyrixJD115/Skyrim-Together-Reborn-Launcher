@@ -91,7 +91,9 @@ pub fn run(input: Input<'_>) -> Vec<Check> {
         "Address Library",
         al_dll
             .clone()
-            .unwrap_or_else(|| "Data/SKSE/Plugins/version-1-6-*.dll missing — press Install".into()),
+            .unwrap_or_else(|| {
+                "Data/SKSE/Plugins/version*(lib)*-*.dll/.bin missing — press Install".into()
+            }),
     ));
 
     // 5. Plugins.txt --------------------------------------------------------
@@ -108,34 +110,56 @@ pub fn run(input: Input<'_>) -> Vec<Check> {
     checks
 }
 
-/// The newest `version-1-6-*.dll` (Address Library All in One).
+/// The newest Address Library file (All in One) in `Data/SKSE/Plugins`.
+///
+/// Two naming schemes exist in the wild, and both are legitimate:
+/// - classic DLL drops: `version-1-6-1170-0.dll`
+/// - the current All-in-one archives: `version-1-5-97-0.bin` and
+///   `versionlib-1-6-1170-0.bin` (`.bin` since SKSE 2.2.x / runtime 1.6.629+,
+///   covering the 1.7.x runtimes too).
 fn find_address_library(game_dir: &Path) -> Option<String> {
     let mut best: Option<(String, [u64; 4])> = None;
     let plugins = game_dir.join("Data/SKSE/Plugins");
     for entry in std::fs::read_dir(&plugins).ok()?.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if !(name.starts_with("version-") && name.ends_with(".dll")) {
+        let Some((version, key)) = address_library_version(&name) else {
             continue;
-        }
-        let parts: Vec<u64> = name[8..name.len() - 4]
-            .split('-')
-            .filter_map(|p| p.parse().ok())
-            .collect();
-        let key: [u64; 4] = [
-            parts.first().copied().unwrap_or(0),
-            parts.get(1).copied().unwrap_or(0),
-            parts.get(2).copied().unwrap_or(0),
-            parts.get(3).copied().unwrap_or(0),
-        ];
+        };
         if best.as_ref().map(|b| key > b.1).unwrap_or(true) {
-            best = Some((format!("Data/SKSE/Plugins/{name}"), key));
+            best = Some((format!("Data/SKSE/Plugins/{name} ({version})"), key));
         }
     }
     best.map(|(name, _)| name)
 }
 
+/// Parse an Address Library file name into its `1.6.1170.0`-style version
+/// label and a numeric sort key. Returns `None` for files we don't manage.
+fn address_library_version(name: &str) -> Option<(String, [u64; 4])> {
+    let lower = name.to_lowercase();
+    let stem = lower
+        .strip_prefix("version-")
+        .or_else(|| lower.strip_prefix("versionlib-"))?;
+    let stem = stem.strip_suffix(".dll").or_else(|| stem.strip_suffix(".bin"))?;
+    let parts: Vec<u64> = stem.split('-').filter_map(|p| p.parse().ok()).collect();
+    if parts.is_empty() {
+        return None;
+    }
+    let key: [u64; 4] = [
+        parts.first().copied().unwrap_or(0),
+        parts.get(1).copied().unwrap_or(0),
+        parts.get(2).copied().unwrap_or(0),
+        parts.get(3).copied().unwrap_or(0),
+    ];
+    Some((parts.iter().map(|p| p.to_string()).collect::<Vec<_>>().join("."), key))
+}
+
 /// Any known Plugins.txt location lists SkyrimTogether.esp?
+///
+/// Current Skyrim Together archives ship no `.esp` plugin at all (STR injects
+/// itself at runtime), so a missing plugin entry is only a problem when a
+/// `SkyrimTogether*.esp` actually exists in the game's Data folder.
 fn check_plugins(game_dir: &Path) -> (bool, String) {
+    let str_plugins = crate::plugins::find_str_plugins(&game_dir.join("Data"));
     let mut locations = Vec::new();
     let mut enabled = 0usize;
     let mut found_any = false;
@@ -157,7 +181,13 @@ fn check_plugins(game_dir: &Path) -> (bool, String) {
         }
     }
 
-    if !found_any {
+    if str_plugins.is_empty() {
+        (
+            true,
+            "this Skyrim Together version ships no .esp plugin — no Plugins.txt entry needed"
+                .to_string(),
+        )
+    } else if !found_any {
         (
             false,
             "no Plugins.txt yet — it is created on the game's first run".to_string(),
@@ -248,4 +278,48 @@ fn windows_checks(checks: &mut Vec<Check>) {
         "Launch mode",
         "SkyrimTogether.exe is started directly; Steam link not needed on Windows".to_string(),
     ));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_all_address_library_naming_schemes() {
+        // Classic DLL drops.
+        let (v, k) = address_library_version("version-1-6-1170-0.dll").unwrap();
+        assert_eq!(v, "1.6.1170.0");
+        assert_eq!(k, [1, 6, 1170, 0]);
+        // Current All-in-one .bin layout (SE 1.5.x legacy + versionlib).
+        let (_, k) = address_library_version("version-1-5-97-0.bin").unwrap();
+        assert_eq!(k, [1, 5, 97, 0]);
+        let (v, k) = address_library_version("versionlib-1-7-104-0.bin").unwrap();
+        assert_eq!(v, "1.7.104.0");
+        assert_eq!(k, [1, 7, 104, 0]);
+        // Case-insensitive extension.
+        assert!(address_library_version("versionlib-1-6-640-0.BIN").is_some());
+        // Not our files.
+        assert!(address_library_version("SkyrimTogether.dll").is_none());
+        assert!(address_library_version("versionlib-1-6-640-0.bak").is_none());
+        assert!(address_library_version("readme.txt").is_none());
+    }
+
+    #[test]
+    fn newest_version_wins_regardless_of_extension() {
+        let tmp = std::env::temp_dir().join(format!("str-al-check-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let plugins = tmp.join("Data/SKSE/Plugins");
+        std::fs::create_dir_all(&plugins).unwrap();
+        // Regression: a .bin-only install (current All-in-one archives, e.g.
+        // for runtime 1.7.x) must be detected — the old code only saw .dll.
+        std::fs::write(plugins.join("versionlib-1-7-104-0.bin"), b"x").unwrap();
+        let found = find_address_library(&tmp).unwrap();
+        assert!(found.contains("1.7.104"), "got: {found}");
+        // A newer classic DLL beats it.
+        std::fs::write(plugins.join("version-1-6-1170-0.dll"), b"x").unwrap();
+        std::fs::write(plugins.join("versionlib-1-6-1180-0.bin"), b"x").unwrap();
+        let found = find_address_library(&tmp).unwrap();
+        assert!(found.contains("1.7.104"), "got: {found}");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }

@@ -5,6 +5,9 @@
 //! Cinzel headings, parchment-and-gold accents and the Skyrim Together dragon
 //! emblem.
 
+// GUI app: never allocate a console window on Windows.
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 // Each `str-<group>/` directory below `src/` holds one area of the launcher;
 // `#[path]` keeps the crate-internal module names short (`crate::steam`,
 // `crate::config`, …) while the file tree stays grouped and hyphenated.

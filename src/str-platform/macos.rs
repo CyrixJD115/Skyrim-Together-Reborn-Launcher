@@ -20,10 +20,6 @@ pub fn write_str_registry(_game_dir: &PathBuf) -> PlatformResult<()> {
     Err("Not supported on macOS".into())
 }
 
-pub fn create_shortcuts(_game_dir: &std::path::Path) -> PlatformResult<Vec<String>> {
-    Err("Not supported on macOS".into())
-}
-
 pub fn remove_shortcuts(_game_dir: &std::path::Path) {}
 
 pub fn spawn_detached(
