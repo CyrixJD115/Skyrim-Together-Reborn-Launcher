@@ -36,8 +36,10 @@ mod plugins;
 mod proton;
 #[path = "str-server/mod.rs"]
 mod server;
+#[cfg(all(unix, not(target_os = "macos")))]
 #[path = "str-entry/sgdb.rs"]
 mod sgdb;
+#[cfg(all(unix, not(target_os = "macos")))]
 #[path = "str-entry/shortcuts_vdf.rs"]
 mod shortcuts_vdf;
 #[path = "str-steam/mod.rs"]

@@ -52,6 +52,7 @@ impl std::fmt::Display for LaunchMode {
 }
 
 impl LaunchMode {
+    #[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
     pub const ALL: [LaunchMode; 2] = [LaunchMode::LauncherReplacement, LaunchMode::SteamGame];
 
     pub fn label(self) -> &'static str {
@@ -61,6 +62,7 @@ impl LaunchMode {
         }
     }
 
+    #[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
     pub fn description(self) -> &'static str {
         match self {
             LaunchMode::LauncherReplacement => {

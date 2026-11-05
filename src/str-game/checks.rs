@@ -21,6 +21,10 @@ impl Check {
     }
 }
 
+/// `steam_root`, `proton_tool` and `launch_mode` are only read by the Linux
+/// (Proton) checks; they stay on the struct so callers build one `Input`
+/// everywhere.
+#[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
 pub struct Input<'a> {
     pub game_dir: Option<&'a Path>,
     pub game_version: Option<&'a str>,

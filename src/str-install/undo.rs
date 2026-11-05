@@ -2,7 +2,9 @@
 //! manifest files, launch integration, Creation Club backups and plugin list
 //! entries.
 
-use super::{files, linux_setup, Params, Reporter};
+use super::{files, Params, Reporter};
+#[cfg(all(unix, not(target_os = "macos")))]
+use super::linux_setup;
 use crate::cc_clean;
 use crate::config::InstallManifest;
 

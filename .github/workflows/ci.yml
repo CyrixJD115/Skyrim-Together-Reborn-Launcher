@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: Linux — clippy, tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install wayland/x11 dev bits (winit)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libxcb1-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+      - name: Clippy (deny warnings)
+        run: cargo clippy -- -D warnings
+      - name: Tests
+        run: cargo test
+      - name: Build
+        run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: str-launcher-linux
+          path: target/release/str-launcher
+
+  windows:
+    name: Windows — clippy, build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Clippy (deny warnings)
+        run: cargo clippy -- -D warnings
+      - name: Build
+        run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: str-launcher-windows
+          path: target/release/str-launcher.exe

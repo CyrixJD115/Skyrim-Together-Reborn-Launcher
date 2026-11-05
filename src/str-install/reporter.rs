@@ -40,6 +40,7 @@ impl Reporter {
         let _ = self.tx.send(Event::Log(msg.into())).await;
     }
 
+    #[cfg(all(unix, not(target_os = "macos")))]
     pub fn sender(&self) -> mpsc::Sender<Event> {
         self.tx.clone()
     }

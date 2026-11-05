@@ -7,6 +7,7 @@ use iced::{Element, Length};
 use super::widgets::{card, danger_btn, link_btn, muted, ornament, secondary_btn, section_title, LINK_APIKEY};
 use super::view::offline_row;
 use super::{App, Message, OpenTarget};
+#[cfg(all(unix, not(target_os = "macos")))]
 use crate::config::LaunchMode;
 use crate::ui;
 
