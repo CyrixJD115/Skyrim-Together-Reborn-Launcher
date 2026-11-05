@@ -1,0 +1,283 @@
+//! Launching Skyrim Together, vanilla Skyrim and the dedicated server.
+
+use std::path::{Path, PathBuf};
+
+use crate::steam::SKYRIM_APPID;
+
+/// Everything needed to build launchers.
+#[derive(Clone)]
+#[cfg_attr(target_os = "windows", allow(dead_code))]
+pub struct LaunchContext {
+    pub game_dir: PathBuf,
+    pub steam_root: Option<PathBuf>,
+    pub proton_tool: String,
+    pub dirs: crate::paths::AppDirs,
+}
+
+#[cfg(target_os = "windows")]
+pub fn launch_together(ctx: &LaunchContext) -> Result<(), String> {
+    let exe = ctx.game_dir.join("SkyrimTogether.exe");
+    if !exe.is_file() {
+        return Err(format!(
+            "SkyrimTogether.exe is missing from {}.\nPress Install to set up Skyrim Together Reborn first.",
+            ctx.game_dir.display()
+        ));
+    }
+    // Make sure STR can find SkyrimSE.exe even if the user moved things around.
+    let _ = crate::platform::native::write_str_registry(&ctx.game_dir);
+    crate::platform::native::ensure_steam_running();
+    crate::platform::native::spawn_detached(&exe, &[], &ctx.game_dir)
+}
+
+#[cfg(target_os = "windows")]
+pub fn launch_vanilla(_ctx: &LaunchContext) -> Result<(), String> {
+    // Launch through Steam; this bypasses the STR launcher replacement and any
+    // manual launching, using the official launcher path.
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", &format!("steam://rungameid/{SKYRIM_APPID}")])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("failed to open Steam: {e}"))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+pub fn launch_together(ctx: &LaunchContext) -> Result<(), String> {
+    // Surface the common failure causes *before* spawning anything, so the
+    // launcher can show a real error instead of "nothing happening".
+    let together = ctx.game_dir.join("SkyrimTogether.exe");
+    if !together.is_file() {
+        return Err(format!(
+            "SkyrimTogether.exe is missing from {}.\nPress Install to set up Skyrim Together \
+             Reborn first.",
+            ctx.game_dir.display()
+        ));
+    }
+    let compat = crate::steam::compat_dir_for(&ctx.game_dir);
+    if compat.is_none() || !compat.as_ref().is_some_and(|c| c.join("pfx").is_dir()) {
+        return Err(
+            "The Proton prefix for Skyrim does not exist yet.\nStart Skyrim once through Steam \
+             (until you reach the main menu), then press Install again."
+                .to_string(),
+        );
+    }
+
+    let script = ensure_launch_script(ctx)?;
+    let log = ctx.dirs.logs.join("launch.log");
+    crate::platform::native::spawn_detached(
+        Path::new("/bin/sh"),
+        &["-c", &script_detached(&script, &log)],
+        &ctx.game_dir,
+    )
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+pub fn launch_vanilla(ctx: &LaunchContext) -> Result<(), String> {
+    use std::process::Command;
+    // Uses Steam's own launch path; if the launcher replacement is active,
+    // Steam will start Skyrim Together instead — Undo restores vanilla.
+    let steam = ctx
+        .steam_root
+        .clone()
+        .map(|r| r.join("steam"))
+        .unwrap_or_else(|| PathBuf::from("steam"));
+    Command::new(steam)
+        .arg("-applaunch")
+        .arg(SKYRIM_APPID)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("failed to start Steam: {e}"))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn script_detached(script: &Path, log: &Path) -> String {
+    format!(
+        "nohup '{}' >>'{}' 2>&1 &",
+        script.display(),
+        log.display()
+    )
+}
+
+/// (Re)generate the Linux launch script. Cheap and idempotent.
+#[cfg(all(unix, not(target_os = "macos")))]
+pub fn ensure_launch_script(ctx: &LaunchContext) -> Result<PathBuf, String> {
+    use crate::steam::SKYRIM_APPID;
+    let script_path = ctx.dirs.scripts.join("launch-skyrim-together.sh");
+    let steam_root = ctx
+        .steam_root
+        .clone()
+        .or_else(|| crate::steam::steam_roots().first().cloned())
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share/Steam")
+        });
+    let compat = crate::steam::compat_dir_for(&ctx.game_dir)
+        .unwrap_or_else(|| steam_root.join("steamapps/compatdata").join(SKYRIM_APPID));
+    let proton_path = crate::proton::find_tool(std::slice::from_ref(&steam_root), &ctx.proton_tool)
+        .map(|t| t.path.join("proton"))
+        .unwrap_or_else(|| {
+            steam_root
+                .join("compatibilitytools.d")
+                .join(&ctx.proton_tool)
+                .join("proton")
+        });
+    if !proton_path.is_file() {
+        return Err(format!(
+            "The compatibility tool \"{}\" is not installed ({})\nPress Install first — it \
+             downloads and selects the right GE-Proton automatically.",
+            ctx.proton_tool,
+            proton_path.display()
+        ));
+    }
+    let script = format!(
+        r#"#!/usr/bin/env bash
+# Generated by STR Launcher {version} — launches Skyrim Together Reborn with
+# the game's own Proton prefix.
+
+GAME_DIR="{game_dir}"
+PROTON="{proton_path}"
+COMPAT_DATA="{compat}"
+STEAM_ROOT="{steam_root}"
+
+export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_ROOT"
+export STEAM_COMPAT_DATA_PATH="$COMPAT_DATA"
+export STEAM_COMPAT_TOOL_PATHS="${{PROTON%/proton}}"
+export STEAM_COMPAT_APP_ID="{appid}"
+export SteamAppId="{appid}"
+export SteamGameId="{appid}"
+export PROTON_VERB="run"
+
+if ! pgrep -x steam >/dev/null 2>&1; then
+    echo "Starting Steam..."
+    ("$STEAM_ROOT/steam" -silent >/dev/null 2>&1 &)
+    for _ in $(seq 1 30); do
+        pgrep -x steam >/dev/null 2>&1 && break
+        sleep 1
+    done
+fi
+
+if [ ! -f "$PROTON" ]; then
+    echo "[$(date '+%F %T')] ERROR: Proton not found at $PROTON" >&2
+    exit 1
+fi
+if [ ! -f "$GAME_DIR/SkyrimTogether.exe" ]; then
+    echo "[$(date '+%F %T')] ERROR: SkyrimTogether.exe missing in $GAME_DIR" >&2
+    exit 1
+fi
+
+cd "$GAME_DIR" || exit 1
+echo "[$(date '+%F %T')] launching SkyrimTogether.exe with $(basename "$PROTON"), prefix $COMPAT_DATA"
+exec "$PROTON" run "$GAME_DIR/SkyrimTogether.exe" "$@"
+"#,
+        version = crate::paths::APP_VERSION,
+        game_dir = ctx.game_dir.display(),
+        proton_path = proton_path.display(),
+        compat = compat.display(),
+        steam_root = steam_root.display(),
+        appid = SKYRIM_APPID,
+    );
+    std::fs::create_dir_all(&ctx.dirs.scripts).map_err(|e| e.to_string())?;
+    std::fs::write(&script_path, script)
+        .map_err(|e| format!("write {}: {e}", script_path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755));
+    }
+    Ok(script_path)
+}
+
+// ---------------------------------------------------------------------------
+// Dedicated server
+// ---------------------------------------------------------------------------
+
+pub fn server_dir(dirs: &crate::paths::AppDirs) -> PathBuf {
+    dirs.data.join("server")
+}
+
+#[cfg(target_os = "windows")]
+pub fn launch_server(dirs: &crate::paths::AppDirs) -> Result<(), String> {
+    let dir = server_dir(dirs);
+    let exe = find_server_exe(&dir).ok_or_else(|| {
+        "The server is not installed yet — use \"Get server\" in the Server section.".to_string()
+    })?;
+    crate::platform::native::spawn_detached(&exe, &[], exe.parent().unwrap_or(&dir))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+pub fn launch_server(ctx: &LaunchContext, dirs: &crate::paths::AppDirs) -> Result<(), String> {
+    let dir = server_dir(dirs);
+    let exe = find_server_exe(&dir).ok_or_else(|| {
+        "The server is not installed yet — use \"Get server\" in the Server section.".to_string()
+    })?;
+    let compat = dirs.data.join("server-compat");
+    std::fs::create_dir_all(&compat).map_err(|e| e.to_string())?;
+    let steam_root = ctx
+        .steam_root
+        .clone()
+        .or_else(|| crate::steam::steam_roots().first().cloned())
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share/Steam")
+        });
+    let proton_path = crate::proton::find_tool(std::slice::from_ref(&steam_root), &ctx.proton_tool)
+        .map(|t| t.path.join("proton"))
+        .unwrap_or_else(|| {
+            steam_root
+                .join("compatibilitytools.d")
+                .join(&ctx.proton_tool)
+                .join("proton")
+        });
+    let script_path = dirs.scripts.join("launch-skyrim-server.sh");
+    let script = format!(
+        r#"#!/usr/bin/env bash
+# Generated by STR Launcher — runs the dedicated Skyrim Together server under Proton.
+export STEAM_COMPAT_CLIENT_INSTALL_PATH="{steam_root}"
+export STEAM_COMPAT_DATA_PATH="{compat}"
+export STEAM_COMPAT_TOOL_PATHS="${{PROTON%/proton}}"
+export STEAM_COMPAT_APP_ID="{appid}"
+export SteamAppId="{appid}"
+export PROTON_VERB="run"
+PROTON="{proton_path}"
+cd "{dir}" || exit 1
+exec "$PROTON" run "{exe}"
+"#,
+        steam_root = steam_root.display(),
+        compat = compat.display(),
+        appid = SKYRIM_APPID,
+        proton_path = proton_path.display(),
+        dir = exe.parent().unwrap_or(&dir).display(),
+        exe = exe.display(),
+    );
+    std::fs::write(&script_path, &script).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755));
+    }
+    crate::platform::native::spawn_detached(
+        Path::new("/bin/sh"),
+        &["-c", &format!("nohup '{}' >>'{}/server.log' 2>&1 &", script_path.display(), dirs.logs.display())],
+        &dir,
+    )
+}
+
+pub fn find_server_exe(dir: &Path) -> Option<PathBuf> {
+    fn walk(d: &Path, depth: usize) -> Option<PathBuf> {
+        if depth > 3 {
+            return None;
+        }
+        if let Ok(entries) = std::fs::read_dir(d) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_file() {
+                    let name = p.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+                    if name == "skyrimtogetherserver.exe" || name == "stserver.exe" {
+                        return Some(p);
+                    }
+                } else if p.is_dir() && walk(&p, depth + 1).is_some() {
+                    return walk(&p, depth + 1);
+                }
+            }
+        }
+        None
+    }
+    walk(dir, 0)
+}

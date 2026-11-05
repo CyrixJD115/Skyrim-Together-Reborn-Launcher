@@ -1,0 +1,35 @@
+[package]
+name = "str-launcher"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+description = "Universal Skyrim Together Reborn launcher — automated install, update and launch for Windows and Linux"
+license = "MIT"
+repository = "https://github.com/str-launcher/str-launcher"
+keywords = ["skyrim", "skyrim-together", "reborn", "launcher", "proton"]
+categories = ["games"]
+
+[dependencies]
+iced = { version = "0.14", features = ["tokio", "tiny-skia", "image", "svg"] }
+crc32fast = "1.4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "sync", "time", "io-util"] }
+tokio-stream = "0.1"
+futures = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "http2", "gzip"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tar = "0.4"
+flate2 = "1"
+thiserror = "2"
+directories = "6"
+image = { version = "0.25", default-features = false, features = ["png"] }
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
+[profile.release]
+lto = "thin"
+strip = true
+codegen-units = 1
