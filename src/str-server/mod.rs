@@ -38,8 +38,7 @@ pub async fn ensure_server(
                 server_file.file_id,
                 &server_file.name,
             );
-            let expected = if server_file.size > 0 { server_file.size } else { 0 };
-            if !(dest.is_file() && expected > 0 && crate::paths::file_size(&dest) == expected) {
+            if !crate::download::cache_is_complete(&dest, server_file.size) {
                 let url = client
                     .download_link("skyrimspecialedition", NEXUS_STR, server_file.file_id)
                     .await?;
@@ -55,7 +54,7 @@ pub async fn ensure_server(
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
     crate::archive::extract_zip(&archive_path, &staging, progress)?;
-    let root = resolve_server_root(&staging);
+    let root = crate::archive::descend_wrappers(&staging, &[]);
     if crate::launch::find_server_exe(&root).is_none() {
         return Err(format!(
             "{} does not contain SkyrimTogetherServer.exe — this does not look like the server archive.",
@@ -77,21 +76,6 @@ pub async fn ensure_server(
         )
     })?;
     Ok(server_dir)
-}
-
-fn resolve_server_root(dir: &Path) -> PathBuf {
-    let mut cur = dir.to_path_buf();
-    for _ in 0..4 {
-        let entries: Vec<_> = std::fs::read_dir(&cur)
-            .map(|rd| rd.flatten().collect())
-            .unwrap_or_default();
-        if entries.len() == 1 && entries[0].path().is_dir() {
-            cur = entries[0].path();
-        } else {
-            break;
-        }
-    }
-    cur
 }
 
 #[derive(Debug, Clone, Default)]
@@ -186,5 +170,5 @@ pub fn write_setting(path: &Path, key: &str, value: &str) -> Result<(), String> 
     if !out.ends_with('\n') {
         out.push('\n');
     }
-    crate::config::atomic_write(path, out.as_bytes())
+    crate::paths::atomic_write(path, out.as_bytes())
 }

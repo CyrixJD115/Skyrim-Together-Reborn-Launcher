@@ -175,7 +175,7 @@ pub fn scan_mount_bases(bases: &[PathBuf]) -> Vec<PathBuf> {
                 root.clone(),
                 root.join("Steam"),
                 root.join("SteamLibrary"),
-                root.join("steamapps").join("..").join("SteamLibrary"),
+                root.join("SteamLibrary"),
             ] {
                 if candidate.join("steamapps/appmanifest_489830.acf").is_file()
                     && !libs.contains(&candidate)
@@ -304,7 +304,7 @@ mod tests {
         )
         .unwrap();
 
-        let libs = scan_mount_bases(&[tmp.clone()]);
+        let libs = scan_mount_bases(std::slice::from_ref(&tmp));
         assert_eq!(libs, vec![tmp.join("gaming/Steam")]);
 
         let install = inspect_library(&libs[0], &tmp).unwrap();

@@ -139,23 +139,28 @@ Vortex, MO2, SKSE, SteamCMD, or any scripting runtime.
 ## Project layout
 
 ```
-src/
-├── main.rs           Iced bootstrap
-├── app/              UI state, update loop, view (mod.rs / update.rs / view.rs)
-├── str_install.rs    The automated install/undo pipeline (the heart)
-├── steam.rs          Steam library scanning + Skyrim detection
-├── vdf.rs            VDF parsing + config.vdf CompatToolMapping surgery
-├── proton.rs         GE-Proton discovery / install / selection
-├── nexus.rs          Nexus Mods API v1 client
-├── download.rs       Async downloader with retry + resume
-├── archive.rs        ZIP / tar.gz extraction with traversal protection
-├── cc_clean.rs       Creation Club backup & restore
-├── plugins.rs        Plugins.txt handling
-├── pe_version.rs     PE VS_VERSIONINFO parser (game/exe version display)
-├── launch.rs         Launchers for game / vanilla / server
-├── server.rs         Dedicated server download + STServer.ini editing
-├── platform/         Windows (registry, .lnk) and Linux (proton, .desktop) code
-└── ui.rs             Theme + styles
+src/                    Every area lives in its own str-<module>/ directory
+├── main.rs             Iced bootstrap + module wiring
+├── str-app/            UI state, update loop and the four tabs
+│                       (mod.rs / update.rs / view.rs / widgets.rs / tab_*.rs)
+├── str-ui/             Theme + styles
+├── str-config/         Persistent config (mod.rs) and app dirs + fs helpers (paths.rs)
+├── str-game/           Game probes: checks, cc_clean, plugins, pe_version
+├── str-archive/        ZIP / tar.gz extraction with traversal protection
+├── str-steam/          Steam library scanning (mod.rs), VDF parsing (vdf.rs),
+│                       GE-Proton discovery / install / selection (proton.rs)
+├── str-entry/          Steam game entry mode: steam_entry (mod.rs),
+│                       binary shortcuts.vdf (shortcuts_vdf.rs), artwork (sgdb.rs)
+├── str-nexus/          Nexus Mods API v1 client (mod.rs) and the async
+│                       downloader with retry + resume (download.rs)
+├── str-install/        The automated install/undo pipeline (the heart):
+│                       step orchestration (mod.rs), progress events
+│                       (reporter.rs), file merging (files.rs), Linux setup
+│                       (linux_setup.rs), uninstall (undo.rs)
+├── str-launch/         Launchers for game / vanilla / server
+├── str-server/         Dedicated server download + STServer.ini editing
+└── str-platform/       Windows (registry, .lnk), Linux (proton, .desktop)
+                        and macOS stub, selected at compile time
 ```
 
 ## Credits

@@ -69,9 +69,8 @@ pub fn client_tab(app: &App) -> Element<'_, Message> {
 /// The launch-readiness checklist: every precondition for a successful
 /// launch, probed live so failures are visible before they happen.
 fn preflight_card(app: &App) -> Option<Element<'_, Message>> {
-    if app.game_dir.is_none() {
-        return None;
-    }
+    // Nothing to preflight without a game folder.
+    app.game_dir.as_ref()?;
 
     let mut rows = column![].spacing(8);
     for check in &app.checks {
@@ -116,8 +115,7 @@ fn preflight_card(app: &App) -> Option<Element<'_, Message>> {
                 footnote,
             ]
             .spacing(10),
-        )
-        .into(),
+        ),
     )
 }
 

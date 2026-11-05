@@ -11,9 +11,9 @@ pub mod linux;
 pub use linux as native;
 
 #[cfg(target_os = "macos")]
-pub mod macos_stub;
+pub mod macos;
 #[cfg(target_os = "macos")]
-pub use macos_stub as native;
+pub use macos as native;
 
 /// Shared result type for platform helpers.
 pub type PlatformResult<T> = Result<T, String>;

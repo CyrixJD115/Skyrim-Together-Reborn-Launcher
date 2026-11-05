@@ -494,7 +494,7 @@ mod tests {
                 .into(),
             icon: r#""/home/u/.local/share/Steam/userdata/1/config/grid/1_icon.png""#.into(),
         };
-        let bytes = serialize_file(&[spec.clone()]);
+        let bytes = serialize_file(std::slice::from_ref(&spec));
         let spans = entry_spans(&bytes).unwrap();
         assert_eq!(spans.len(), 1);
         let entry = &bytes[spans[0].0..spans[0].1];

@@ -12,7 +12,7 @@
 //! the file from memory on exit), so Steam is paused around the edit and
 //! restarted afterwards.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::shortcuts_vdf::{self, ShortcutSpec};
 use crate::str_install::Reporter;
@@ -71,7 +71,7 @@ pub fn user_config_dirs() -> Vec<PathBuf> {
     out
 }
 
-fn shortcuts_path(config_dir: &PathBuf) -> PathBuf {
+fn shortcuts_path(config_dir: &Path) -> PathBuf {
     config_dir.join("shortcuts.vdf")
 }
 
@@ -147,12 +147,12 @@ pub async fn ensure(plan: &EntryPlan, rep: &Reporter, warnings: &mut Vec<String>
     let results = pause_steam(rep, || {
         let mut results = Vec::new();
         for dir in &dirs {
-            let path = shortcuts_path(&dir);
+            let path = shortcuts_path(dir);
             let outcome = match std::fs::read(&path) {
                 Ok(bytes) => match shortcuts_vdf::upsert(&bytes, &spec) {
                     Ok(new_bytes) => {
                         if new_bytes != bytes {
-                            match crate::config::atomic_write(&path, &new_bytes) {
+                            match crate::paths::atomic_write(&path, &new_bytes) {
                                 Ok(()) => Outcome::Updated(path),
                                 Err(e) => Outcome::Failed(path, e),
                             }
@@ -166,9 +166,9 @@ pub async fn ensure(plan: &EntryPlan, rep: &Reporter, warnings: &mut Vec<String>
                     if let Err(e) = std::fs::create_dir_all(dir) {
                         Outcome::Failed(path, format!("create {}: {e}", dir.display()))
                     } else {
-                        match crate::config::atomic_write(
+                        match crate::paths::atomic_write(
                             &path,
-                            &shortcuts_vdf::serialize_file(&[spec.clone()]),
+                            &shortcuts_vdf::serialize_file(std::slice::from_ref(&spec)),
                         ) {
                             Ok(()) => Outcome::Created(path),
                             Err(e) => Outcome::Failed(path, e),
@@ -236,7 +236,7 @@ pub async fn remove(plan: Option<&EntryPlan>, rep: &Reporter) {
                 continue;
             };
             if let Ok((new_bytes, ids)) = shortcuts_vdf::remove_matching(&bytes, APP_NAME, EXE_TAG) {
-                if !ids.is_empty() && crate::config::atomic_write(&path, &new_bytes).is_ok() {
+                if !ids.is_empty() && crate::paths::atomic_write(&path, &new_bytes).is_ok() {
                     removed += ids.len();
                     for id in &ids {
                         cleaned_grid_ids.push((dir.clone(), *id));

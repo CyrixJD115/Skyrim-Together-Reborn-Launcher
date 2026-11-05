@@ -62,15 +62,20 @@ impl NexusClient {
         ]
     }
 
+    /// GET an API v1 endpoint, with the standard headers.
+    async fn api_get(&self, path: &str) -> Result<serde_json::Value, String> {
+        let headers = self.headers();
+        let header_refs: Vec<(&str, &str)> =
+            headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let url = format!("{API_BASE}{path}");
+        download::get_json(&url, &header_refs).await
+    }
+
     pub async fn validate_key(&self) -> Result<(), String> {
         if self.key.is_empty() {
             return Err("no Nexus API key configured".into());
         }
-        let headers = self.headers();
-        let header_refs: Vec<(&str, &str)> =
-            headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        let url = format!("{API_BASE}/users/validate.json");
-        let value = download::get_json(&url, &header_refs).await?;
+        let value = self.api_get("/users/validate.json").await?;
         match value.get("user_id").and_then(|v| v.as_u64()) {
             Some(_) => Ok(()),
             None => Err("Nexus API key was not accepted (validate.json has no user_id)".into()),
@@ -86,11 +91,9 @@ impl NexusClient {
                     .into(),
             );
         }
-        let headers = self.headers();
-        let header_refs: Vec<(&str, &str)> =
-            headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        let url = format!("{API_BASE}/games/{domain}/mods/{mod_id}/files.json");
-        let value = download::get_json(&url, &header_refs).await?;
+        let value = self
+            .api_get(&format!("/games/{domain}/mods/{mod_id}/files.json"))
+            .await?;
         let parsed: FilesResponse =
             serde_json::from_value(value).map_err(|e| format!("unexpected files.json: {e}"))?;
         Ok(parsed.files)
@@ -106,13 +109,11 @@ impl NexusClient {
 
     /// Resolve the temporary CDN download URL for a file.
     pub async fn download_link(&self, domain: &str, mod_id: u64, file_id: u64) -> Result<String, String> {
-        let headers = self.headers();
-        let header_refs: Vec<(&str, &str)> =
-            headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        let url = format!(
-            "{API_BASE}/games/{domain}/mods/{mod_id}/files/{file_id}/download_link.json"
-        );
-        let value = download::get_json(&url, &header_refs).await?;
+        let value = self
+            .api_get(&format!(
+                "/games/{domain}/mods/{mod_id}/files/{file_id}/download_link.json"
+            ))
+            .await?;
         let urls = value
             .as_array()
             .and_then(|a| a.first())
@@ -136,9 +137,8 @@ impl NexusClient {
             .clone();
         let dest = download::cache_path(dest_dir, mod_id, main.file_id, &main.name);
         // Reuse the cache when the file is already complete.
-        let expected = if main.size > 0 { main.size } else { 0 };
-        if dest.is_file() && expected > 0 && crate::paths::file_size(&dest) == expected {
-            progress(expected, expected);
+        if download::cache_is_complete(&dest, main.size) {
+            progress(main.size, main.size);
             return Ok((dest, main));
         }
         let url = self.download_link(domain, mod_id, main.file_id).await?;

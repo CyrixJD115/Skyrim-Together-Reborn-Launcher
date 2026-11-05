@@ -214,7 +214,7 @@ mod tests {
         pe[fixed..fixed + 4].copy_from_slice(&0xFEEF_04BDu32.to_le_bytes());
         pe[fixed + 4..fixed + 8].copy_from_slice(&0x0001_0000u32.to_le_bytes());
         pe[fixed + 8..fixed + 12].copy_from_slice(&((1u32 << 16) | 7).to_le_bytes());
-        pe[fixed + 12..fixed + 16].copy_from_slice(&((104u32 << 16) | 0).to_le_bytes());
+        pe[fixed + 12..fixed + 16].copy_from_slice(&(104u32 << 16).to_le_bytes());
 
         let ver = pe_version_from_bytes(&pe).expect("should parse synthetic PE");
         assert_eq!(ver.major, 1);

@@ -136,7 +136,7 @@ fn check_plugins(game_dir: &Path) -> (bool, String) {
     let mut enabled = 0usize;
     let mut found_any = false;
 
-    for profile in candidate_profiles(game_dir) {
+    for profile in crate::plugins::candidate_game_profile_dirs(game_dir) {
         let plugins_txt = profile.join("Plugins.txt");
         if !plugins_txt.is_file() {
             continue;
@@ -163,23 +163,6 @@ fn check_plugins(game_dir: &Path) -> (bool, String) {
     } else {
         (false, format!("SkyrimTogether.esp missing in {} — press Install", locations.join(", ")))
     }
-}
-
-/// Every place a Plugins.txt could live for this game dir.
-fn candidate_profiles(game_dir: &Path) -> Vec<std::path::PathBuf> {
-    let mut users = Vec::new();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    if let Some(compat) = crate::steam::compat_dir_for(game_dir) {
-        users.push(compat.join("pfx/drive_c/users/steamuser"));
-    }
-    #[cfg(target_os = "windows")]
-    if let Ok(user) = std::env::var("USERPROFILE") {
-        users.push(std::path::PathBuf::from(user));
-    }
-    users
-        .iter()
-        .flat_map(|u| crate::plugins::candidate_profile_dirs(u))
-        .collect()
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -222,7 +205,8 @@ fn linux_checks(dir: &Path, checks: &mut Vec<Check>, input: &Input<'_>) {
     // Launch integration, per mode.
     use crate::config::LaunchMode;
     match input.launch_mode {
-        LaunchMode::LauncherReplacement => {            let launcher = dir.join("SkyrimSELauncher.exe");
+        LaunchMode::LauncherReplacement => {
+            let launcher = dir.join("SkyrimSELauncher.exe");
             let is_link = std::fs::symlink_metadata(&launcher)
                 .map(|m| m.is_symlink())
                 .unwrap_or(false);

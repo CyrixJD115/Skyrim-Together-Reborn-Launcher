@@ -68,6 +68,15 @@ pub fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
+/// Write a file via a temp sibling + rename, so readers never see a half-
+/// written file (config.json, Plugins.txt, shortcuts.vdf, …).
+pub fn atomic_write(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, bytes).map_err(|e| format!("write {}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("rename {}: {e}", path.display()))?;
+    Ok(())
+}
+
 /// Best-effort "open a folder in the file manager".
 pub fn open_folder(path: &std::path::Path) {
     #[cfg(target_os = "windows")]

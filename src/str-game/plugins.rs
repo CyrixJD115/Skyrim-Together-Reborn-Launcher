@@ -79,6 +79,30 @@ pub fn candidate_profile_dirs(user_dir: &std::path::Path) -> Vec<std::path::Path
     .collect()
 }
 
+/// Every place a Plugins.txt could live for this game install: the Proton
+/// prefix user dir on Linux, the Windows user profile on Windows, nothing on
+/// macOS. Shared by the install pipeline and the readiness checklist.
+#[allow(unused_variables)]
+pub fn candidate_game_profile_dirs(game_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        crate::steam::compat_dir_for(game_dir)
+            .map(|compat| candidate_profile_dirs(&compat.join("pfx/drive_c/users/steamuser")))
+            .unwrap_or_default()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("USERPROFILE")
+            .ok()
+            .map(|user| candidate_profile_dirs(&std::path::PathBuf::from(user)))
+            .unwrap_or_default()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Vec::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

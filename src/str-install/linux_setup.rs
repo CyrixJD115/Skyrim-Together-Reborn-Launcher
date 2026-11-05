@@ -94,8 +94,9 @@ async fn apply_proton_tool(
     // 1. Make sure the Proton tool exists.
     let mut prog =
         ThrottledProgress::new(rep.sender(), format!("Downloading {}", params.proton_tool));
+    let roots = [root.to_path_buf()];
     let ensure = crate::proton::ensure_tool(
-        std::slice::from_ref(&root.to_path_buf()),
+        &roots,
         &params.proton_tool,
         &params.dirs.staging,
         &mut |d, t| prog.send(d, t),

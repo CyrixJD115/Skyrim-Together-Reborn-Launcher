@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.77"
 description = "Universal Skyrim Together Reborn launcher — automated install, update and launch for Windows and Linux"
 license = "MIT"
-repository = "https://github.com/str-launcher/str-launcher"
+repository = "https://github.com/CyrixJD115/Skyrim-Together-Reborn-Launcher"
 keywords = ["skyrim", "skyrim-together", "reborn", "launcher", "proton"]
 categories = ["games"]
 

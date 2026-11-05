@@ -28,15 +28,29 @@ impl From<String> for DownloadError {
 pub const USER_AGENT: &str =
     concat!("STR-Launcher/", env!("CARGO_PKG_VERSION"), " (universal Skyrim Together Reborn launcher)");
 
-fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        // No total timeout: large archives (hundreds of MB) may legitimately
-        // take a long time. Idle reads are caught by the stream error path.
-        .connect_timeout(Duration::from_secs(15))
-        .read_timeout(Duration::from_secs(60))
-        .build()
-        .map_err(|e| e.to_string())
+/// One process-wide HTTP client, so every request reuses its connection pool
+/// (TLS handshakes and keep-alive connections are expensive to rebuild).
+fn http_client() -> Result<&'static reqwest::Client, String> {
+    static CLIENT: std::sync::OnceLock<Result<reqwest::Client, String>> = std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .user_agent(USER_AGENT)
+                // No total timeout: large archives (hundreds of MB) may
+                // legitimately take a long time. Idle reads are caught by the
+                // stream error path.
+                .connect_timeout(Duration::from_secs(15))
+                .read_timeout(Duration::from_secs(60))
+                .build()
+                .map_err(|e| e.to_string())
+        })
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+/// Exponential backoff between download retries (2s, 4s, 8s, capped at 16s).
+async fn backoff(attempt: u32) {
+    tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)))).await;
 }
 
 /// Download `url` to `dest`, calling `progress(bytes_done, bytes_total)`.
@@ -63,7 +77,7 @@ pub async fn download(
             Ok(r) => r,
             Err(e) => {
                 last_err = format!("request failed: {e}");
-                tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)))).await;
+                backoff(attempt).await;
                 continue;
             }
         };
@@ -72,7 +86,7 @@ pub async fn download(
             last_err = format!("HTTP {}", response.status());
             // 4xx will not get better by retrying (except 408/429).
             if response.status().as_u16() == 408 || response.status().as_u16() == 429 {
-                tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)))).await;
+                backoff(attempt).await;
                 continue;
             }
             return Err(DownloadError::RetriesExhausted { attempts: attempt, last: last_err });
@@ -124,7 +138,7 @@ pub async fn download(
             }
             Some(e) => {
                 last_err = e;
-                tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)))).await;
+                backoff(attempt).await;
             }
         }
     }
@@ -159,4 +173,10 @@ pub fn cache_path(dir: &Path, mod_id: u64, file_id: u64, name: &str) -> PathBuf 
         .map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
         .collect();
     dir.join(format!("{mod_id}_{file_id}_{safe_name}"))
+}
+
+/// Is a cached download complete? `expected` is the size reported by the
+/// API (0 means unknown, in which case the cache is never trusted).
+pub fn cache_is_complete(path: &Path, expected: u64) -> bool {
+    expected > 0 && path.is_file() && crate::paths::file_size(path) == expected
 }

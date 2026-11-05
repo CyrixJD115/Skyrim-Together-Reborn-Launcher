@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::paths::AppDirs;
+use crate::paths::{atomic_write, AppDirs};
 
 pub const CONFIG_FILE: &str = "config.json";
 /// Nexus mod id for Address Library for SKSE Plugins (All in One lives here).
@@ -176,12 +176,6 @@ impl InstallManifest {
     }
 }
 
-pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, bytes).map_err(|e| format!("write {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("rename {}: {e}", path.display()))?;
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {
@@ -192,7 +186,7 @@ mod tests {
         let cfg = Config::default();
         let text = serde_json::to_string(&cfg).unwrap();
         let back: Config = serde_json::from_str(&text).unwrap();
-        assert_eq!(back.clean_cc, true);
+        assert!(back.clean_cc);
         assert_eq!(back.profiles.len(), 1);
     }
 }

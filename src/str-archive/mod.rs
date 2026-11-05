@@ -136,6 +136,13 @@ impl Read for CountingReader {
 /// often wrap everything in a single folder like `SkyrimTogetherReborn/`), but
 /// stop before meaningful top-level names such as `SKSE` or `Data`.
 pub fn resolve_mod_root(dir: &Path) -> PathBuf {
+    descend_wrappers(dir, &["skse", "data"])
+}
+
+/// Descend through single-folder wrappers (up to 4 levels). `stop_before`
+/// lists lowercase folder names that count as content, not wrappers; pass an
+/// empty slice to always descend.
+pub fn descend_wrappers(dir: &Path, stop_before: &[&str]) -> PathBuf {
     let mut cur = dir.to_path_buf();
     for _ in 0..4 {
         let entries: Vec<_> = std::fs::read_dir(&cur)
@@ -143,7 +150,7 @@ pub fn resolve_mod_root(dir: &Path) -> PathBuf {
             .unwrap_or_default();
         if entries.len() == 1 && entries[0].path().is_dir() {
             let name = entries[0].file_name().to_string_lossy().to_lowercase();
-            if name == "skse" || name == "data" {
+            if stop_before.contains(&name.as_str()) {
                 break;
             }
             cur = entries[0].path();

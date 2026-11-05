@@ -2,10 +2,10 @@
 //! buttons used by every tab.
 
 use iced::widget::{button, column, container, row, space, text};
-use iced::{color, Element, Length};
+use iced::{Element, Length};
 
 use super::Message;
-use crate::ui::{self, FONT_CINZEL_BOLD};
+use crate::ui::{self, FONT_CINZEL_BOLD, GOLD_LINK};
 
 pub const LINK_NEXUS: &str = "https://www.nexusmods.com/skyrimspecialedition/mods/69993";
 pub const LINK_WIKI: &str =
@@ -13,9 +13,6 @@ pub const LINK_WIKI: &str =
 pub const LINK_PLAYGUIDE: &str =
     "https://wiki.tiltedphoques.com/tilted-online/general-information/playguide";
 pub const LINK_APIKEY: &str = "https://www.nexusmods.com/settings/api-keys";
-
-/// Warm gold used for link labels.
-const GOLD_LINK: iced::Color = color!(0xa8, 0x8b, 0x5c);
 
 pub fn card<'a>(content: iced::widget::Column<'a, Message>) -> Element<'a, Message> {
     container(content.spacing(10))

@@ -102,23 +102,10 @@ fn script_detached(script: &Path, log: &Path) -> String {
 pub fn ensure_launch_script(ctx: &LaunchContext) -> Result<PathBuf, String> {
     use crate::steam::SKYRIM_APPID;
     let script_path = ctx.dirs.scripts.join("launch-skyrim-together.sh");
-    let steam_root = ctx
-        .steam_root
-        .clone()
-        .or_else(|| crate::steam::steam_roots().first().cloned())
-        .unwrap_or_else(|| {
-            PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share/Steam")
-        });
+    let steam_root = resolve_steam_root(ctx.steam_root.as_deref());
     let compat = crate::steam::compat_dir_for(&ctx.game_dir)
         .unwrap_or_else(|| steam_root.join("steamapps/compatdata").join(SKYRIM_APPID));
-    let proton_path = crate::proton::find_tool(std::slice::from_ref(&steam_root), &ctx.proton_tool)
-        .map(|t| t.path.join("proton"))
-        .unwrap_or_else(|| {
-            steam_root
-                .join("compatibilitytools.d")
-                .join(&ctx.proton_tool)
-                .join("proton")
-        });
+    let proton_path = resolve_proton_path(&steam_root, &ctx.proton_tool);
     if !proton_path.is_file() {
         return Err(format!(
             "The compatibility tool \"{}\" is not installed ({})\nPress Install first — it \
@@ -202,6 +189,28 @@ pub fn launch_server(dirs: &crate::paths::AppDirs) -> Result<(), String> {
     crate::platform::native::spawn_detached(&exe, &[], exe.parent().unwrap_or(&dir))
 }
 
+/// The Steam root to drive: the detected one, else the first known root,
+/// else the default install location.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn resolve_steam_root(explicit: Option<&Path>) -> PathBuf {
+    explicit
+        .map(Path::to_path_buf)
+        .or_else(|| crate::steam::steam_roots().into_iter().next())
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share/Steam")
+        })
+}
+
+/// The `proton` script of the named compatibility tool, or where Install
+/// would have put it (checked for existence by the callers).
+#[cfg(all(unix, not(target_os = "macos")))]
+fn resolve_proton_path(steam_root: &Path, tool: &str) -> PathBuf {
+    let roots = [steam_root.to_path_buf()];
+    crate::proton::find_tool(&roots, tool)
+        .map(|t| t.path.join("proton"))
+        .unwrap_or_else(|| steam_root.join("compatibilitytools.d").join(tool).join("proton"))
+}
+
 #[cfg(all(unix, not(target_os = "macos")))]
 pub fn launch_server(ctx: &LaunchContext, dirs: &crate::paths::AppDirs) -> Result<(), String> {
     let dir = server_dir(dirs);
@@ -210,21 +219,8 @@ pub fn launch_server(ctx: &LaunchContext, dirs: &crate::paths::AppDirs) -> Resul
     })?;
     let compat = dirs.data.join("server-compat");
     std::fs::create_dir_all(&compat).map_err(|e| e.to_string())?;
-    let steam_root = ctx
-        .steam_root
-        .clone()
-        .or_else(|| crate::steam::steam_roots().first().cloned())
-        .unwrap_or_else(|| {
-            PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share/Steam")
-        });
-    let proton_path = crate::proton::find_tool(std::slice::from_ref(&steam_root), &ctx.proton_tool)
-        .map(|t| t.path.join("proton"))
-        .unwrap_or_else(|| {
-            steam_root
-                .join("compatibilitytools.d")
-                .join(&ctx.proton_tool)
-                .join("proton")
-        });
+    let steam_root = resolve_steam_root(ctx.steam_root.as_deref());
+    let proton_path = resolve_proton_path(&steam_root, &ctx.proton_tool);
     let script_path = dirs.scripts.join("launch-skyrim-server.sh");
     let script = format!(
         r#"#!/usr/bin/env bash
@@ -272,8 +268,10 @@ pub fn find_server_exe(dir: &Path) -> Option<PathBuf> {
                     if name == "skyrimtogetherserver.exe" || name == "stserver.exe" {
                         return Some(p);
                     }
-                } else if p.is_dir() && walk(&p, depth + 1).is_some() {
-                    return walk(&p, depth + 1);
+                } else if p.is_dir() {
+                    if let Some(found) = walk(&p, depth + 1) {
+                        return Some(found);
+                    }
                 }
             }
         }

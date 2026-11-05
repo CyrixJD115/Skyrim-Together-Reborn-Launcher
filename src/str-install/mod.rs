@@ -34,13 +34,12 @@ use tokio::sync::mpsc;
 
 use crate::archive;
 use crate::cc_clean;
-use crate::config::{
-    atomic_write, Config, InstallManifest, LaunchMode, NEXUS_ADDRESS_LIBRARY, NEXUS_STR,
-};
+use crate::config::{Config, InstallManifest, LaunchMode, NEXUS_ADDRESS_LIBRARY, NEXUS_STR};
 use crate::nexus::{ModFile, NexusClient};
 use crate::pe_version;
 #[cfg(target_os = "windows")]
 use crate::platform;
+use crate::paths::atomic_write;
 use crate::plugins;
 
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -442,7 +441,7 @@ async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path, warnin
         warnings.push("No SkyrimTogether*.esp plugin found in the game's Data folder.".into());
     }
     let mut plugin_locations_updated = 0;
-    for profile_dir in profile_dirs(params) {
+    for profile_dir in crate::plugins::candidate_game_profile_dirs(&params.game_dir) {
         let plugins_txt = profile_dir.join("Plugins.txt");
         if plugins_txt.is_file() {
             let mut text = std::fs::read_to_string(&plugins_txt).unwrap_or_default();
@@ -503,32 +502,6 @@ async fn configure_platform(
 // ---------------------------------------------------------------------------
 // Shared platform helpers
 // ---------------------------------------------------------------------------
-
-/// Profile folders that may contain Plugins.txt.
-fn profile_dirs(params: &Params) -> Vec<PathBuf> {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = params;
-        std::env::var("USERPROFILE")
-            .ok()
-            .map(|user| plugins::candidate_profile_dirs(&PathBuf::from(user)))
-            .unwrap_or_default()
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        let mut dirs = Vec::new();
-        if let Some(compat) = crate::steam::compat_dir_for(&params.game_dir) {
-            let user = compat.join("pfx/drive_c/users/steamuser");
-            dirs.extend(plugins::candidate_profile_dirs(&user));
-        }
-        dirs
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let _ = params;
-        Vec::new()
-    }
-}
 
 fn check_launched_once(params: &Params) -> bool {
     #[cfg(target_os = "windows")]

@@ -21,6 +21,8 @@ pub const MUTED: Color = Color::from_rgb8(0x99, 0x92, 0x7f);
 /// Skyrim gold — headings, active borders, progress.
 pub const GOLD: Color = Color::from_rgb8(0xb6, 0x94, 0x5a);
 pub const GOLD_BRIGHT: Color = Color::from_rgb8(0xd8, 0xb4, 0x74);
+/// Warm gold for link labels.
+pub const GOLD_LINK: Color = Color::from_rgb8(0xa8, 0x8b, 0x5c);
 pub const SUCCESS: Color = Color::from_rgb8(0x7d, 0x9c, 0x6a);
 pub const SUCCESS_BRIGHT: Color = Color::from_rgb8(0x99, 0xb8, 0x86);
 pub const DANGER: Color = Color::from_rgb8(0xb0, 0x59, 0x45);
