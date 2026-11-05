@@ -577,7 +577,10 @@ mod tests {
     fn test_params(root: &std::path::Path) -> Params {
         Params {
             game_dir: root.join("steamapps/common/Skyrim Special Edition"),
-            steam_root: None,
+            // A fake Steam root keeps the pipeline hermetic: the launch-script
+            // step resolves its Proton tool inside this root instead of the
+            // host's real Steam install.
+            steam_root: Some(root.join("steam")),
             nexus_key: String::new(),
             offline_str: None,
             offline_al: None,
@@ -643,6 +646,13 @@ mod tests {
 
         let mut params = test_params(&root);
         std::fs::create_dir_all(&params.dirs.downloads).unwrap();
+        // Fake GE-Proton tool so the pipeline never downloads or needs a real
+        // compatibility-tool install.
+        let fake_proton = root
+            .join("steam/compatibilitytools.d")
+            .join(crate::steam::DEFAULT_PROTON_TOOL);
+        std::fs::create_dir_all(&fake_proton).unwrap();
+        std::fs::write(fake_proton.join("proton"), b"#!/bin/sh\n").unwrap();
         params.offline_str = Some(str_zip.clone());
         params.offline_al = Some(al_zip.clone());
 
