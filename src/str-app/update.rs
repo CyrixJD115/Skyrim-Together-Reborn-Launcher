@@ -12,6 +12,26 @@ use crate::str_install::Event as PipeEvent;
 use crate::{config, str_install};
 
 impl App {
+    /// Point the app at a validated game folder. Shows an error banner when
+    /// the folder does not contain SkyrimSE.exe (shared by the path input and
+    /// the folder picker).
+    fn set_game_dir(&mut self, p: PathBuf) {
+        if !p.join("SkyrimSE.exe").is_file() {
+            self.banner = Some(Banner::Error(format!(
+                "{} does not contain SkyrimSE.exe.",
+                p.display()
+            )));
+            return;
+        }
+        self.game_dir = Some(p.clone());
+        self.game_path_input = p.display().to_string();
+        self.steam_root = None;
+        self.cfg.active_mut().game_dir = Some(p.clone());
+        self.save_cfg();
+        self.banner = Some(Banner::Info(format!("Game folder set to {}", p.display())));
+        self.refresh_probe();
+    }
+
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Noop => Task::none(),
@@ -296,20 +316,7 @@ impl App {
                 Task::none()
             }
             Message::GamePathSubmitted => {
-                let p = PathBuf::from(self.game_path_input.trim());
-                if p.join("SkyrimSE.exe").is_file() {
-                    self.game_dir = Some(p.clone());
-                    self.steam_root = None;
-                    self.cfg.active_mut().game_dir = Some(p.clone());
-                    self.save_cfg();
-                    self.banner = Some(Banner::Info(format!("Game folder set to {}", p.display())));
-                    self.refresh_probe();
-                } else {
-                    self.banner = Some(Banner::Error(format!(
-                        "{} does not contain SkyrimSE.exe.",
-                        p.display()
-                    )));
-                }
+                self.set_game_dir(PathBuf::from(self.game_path_input.trim()));
                 Task::none()
             }
             Message::BrowseGameDir => Task::perform(
@@ -323,23 +330,8 @@ impl App {
                 Message::GameDirPicked,
             ),
             Message::GameDirPicked(path) => {
-                match path {
-                    Some(p) if p.join("SkyrimSE.exe").is_file() => {
-                        self.game_dir = Some(p.clone());
-                        self.game_path_input = p.display().to_string();
-                        self.steam_root = None;
-                        self.cfg.active_mut().game_dir = Some(p.clone());
-                        self.save_cfg();
-                        self.banner = Some(Banner::Info(format!("Game folder set to {}", p.display())));
-                        self.refresh_probe();
-                    }
-                    Some(p) => {
-                        self.banner = Some(Banner::Error(format!(
-                            "{} does not contain SkyrimSE.exe.",
-                            p.display()
-                        )));
-                    }
-                    None => {}
+                if let Some(p) = path {
+                    self.set_game_dir(p);
                 }
                 Task::none()
             }
@@ -553,14 +545,7 @@ impl App {
             },
             Message::ServerConfigLoaded(found) => match found {
                 Some((path, settings)) => {
-                    self.server_ini = Some((path, settings.clone()));
-                    self.server_inputs = [
-                        settings.port.unwrap_or_default(),
-                        settings.name.unwrap_or_default(),
-                        settings.password.unwrap_or_default(),
-                        settings.max_players.unwrap_or_default(),
-                        settings.mod_check.unwrap_or_default(),
-                    ];
+                    self.apply_server_settings(path, settings);
                     Task::none()
                 }
                 None => {

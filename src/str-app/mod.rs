@@ -1,9 +1,16 @@
 //! The Iced application: shared state, messages and helpers.
 //!
-//! Split into [`update`] (message handling) and [`view`] (rendering).
+//! Split into [`update`] (message handling) and the view side: [`view`] (the
+//! shell: header, banner, progress) plus [`tab_client`], [`tab_server`],
+//! [`tab_info`] and [`tab_settings`], built on [`widgets`] primitives.
 
+mod tab_client;
+mod tab_info;
+mod tab_server;
+mod tab_settings;
 mod update;
 mod view;
+mod widgets;
 
 pub use view::view;
 
@@ -255,16 +262,22 @@ impl App {
             if let Some((path, settings)) =
                 crate::server::read_settings(&crate::launch::server_dir(dirs))
             {
-                self.server_ini = Some((path, settings.clone()));
-                self.server_inputs = [
-                    settings.port.unwrap_or_default(),
-                    settings.name.unwrap_or_default(),
-                    settings.password.unwrap_or_default(),
-                    settings.max_players.unwrap_or_default(),
-                    settings.mod_check.unwrap_or_default(),
-                ];
+                self.apply_server_settings(path, settings);
             }
         }
+    }
+
+    /// Store a freshly read STServer.ini and mirror its values into the
+    /// editor inputs (shared by detection and the Server tab's Reload).
+    pub(crate) fn apply_server_settings(&mut self, path: PathBuf, settings: ServerSettings) {
+        self.server_ini = Some((path, settings.clone()));
+        self.server_inputs = [
+            settings.port.unwrap_or_default(),
+            settings.name.unwrap_or_default(),
+            settings.password.unwrap_or_default(),
+            settings.max_players.unwrap_or_default(),
+            settings.mod_check.unwrap_or_default(),
+        ];
     }
 
     /// Recompute the launch-readiness checklist (fast, read-only).
@@ -359,14 +372,15 @@ where
     Task::stream(futures::stream::unfold(
         (Some(setup), None::<ReceiverStream<PipeEvent>>),
         |(setup, rx)| async move {
-            let mut setup = setup;
-            if let Some(f) = setup.take() {
-                let (tx, rx) = tokio::sync::mpsc::channel::<PipeEvent>(256);
-                tokio::spawn(async move { f(tx).await });
-                let mut rx = ReceiverStream::new(rx);
-                return rx.next().await.map(|ev| (Message::Pipeline(ev), (None, Some(rx))));
-            }
-            let mut rx = rx?;
+            let mut rx = match setup {
+                // First poll: launch the job and take over its receiver.
+                Some(f) => {
+                    let (tx, rx) = tokio::sync::mpsc::channel::<PipeEvent>(256);
+                    tokio::spawn(async move { f(tx).await });
+                    ReceiverStream::new(rx)
+                }
+                None => rx?,
+            };
             rx.next().await.map(|ev| (Message::Pipeline(ev), (None, Some(rx))))
         },
     ))
