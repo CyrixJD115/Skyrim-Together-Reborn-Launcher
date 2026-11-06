@@ -107,6 +107,8 @@ pub enum ServerField {
 pub enum Tab {
     #[default]
     Client,
+    // Hidden from TABS (view.rs) until the dedicated-server flow is tested.
+    #[allow(dead_code)]
     Server,
     Info,
     Settings,

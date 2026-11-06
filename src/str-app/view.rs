@@ -25,9 +25,11 @@ const CONTENT_WIDTH: f32 = 820.0;
 /// How visible the corner dragon is (1.0 = solid white).
 const WATERMARK_OPACITY: f32 = 0.15;
 
-const TABS: [(Tab, &str); 4] = [
+// Server tab hidden for now — the dedicated-server flow isn't tested yet.
+// The code stays (`tab_server`, `str-server`); re-add (Tab::Server, "SERVER")
+// here when it's ready.
+const TABS: [(Tab, &str); 3] = [
     (Tab::Client, "CLIENT"),
-    (Tab::Server, "SERVER"),
     (Tab::Info, "INFO"),
     (Tab::Settings, "SETTINGS"),
 ];
