@@ -1,167 +1,100 @@
 # STR Launcher
 
-**Universal Skyrim Together Reborn launcher for Windows and Linux** — a single
-Rust desktop app that takes you from a clean Skyrim Special Edition install to a
-working multiplayer session with one click. No Vortex, no MO2, no manual file
-shuffling.
+**Play Skyrim Together Reborn with your friends — on Windows or Linux — in one
+click.** No Vortex, no MO2, no manual file shuffling: STR Launcher finds your
+Skyrim, installs the mod, and gets you into a multiplayer session.
 
 ![STR Launcher](assets/screenshot.png)
 
-Built with [Iced](https://iced.rs), fully asynchronous, and modeled directly on
-the official documentation:
+## What you need
 
-- Mod page: <https://www.nexusmods.com/skyrimspecialedition/mods/69993>
-- Official getting-started guide: <https://wiki.tiltedphoques.com/tilted-online/guides/getting-started>
-- Quick setup TL;DR: <https://telegra.ph/Skyrim-Together-Quick-Setup-Vortex-TLDR-10-30>
-- Linux reference: <https://github.com/Cyphs/SteamDeckSTR>
+- **Skyrim Special Edition (Steam, v1.6 or newer)** — launch it once through
+  Steam first (reach the main menu, then quit). The Anniversary Upgrade DLC is
+  *not* needed, and is best disabled.
+- A free [Nexus Mods](https://www.nexusmods.com) account.
+- Windows 8.1+ or Linux (Steam Deck works great).
 
----
+## Quick start
 
-## What it automates
+1. **Download STR Launcher** from the
+   [releases page](https://github.com/CyrixJD115/Skyrim-TR/releases) and run it.
+   It finds your Skyrim install automatically.
+2. **Paste your Nexus API key** (Settings → Nexus Mods) so it can download the
+   mods for you: get it from your
+   [Nexus account settings](https://www.nexusmods.com/users/account?tab=api)
+   → *Generate personal key*. One time only, stored on your PC.
+3. Press **Install Skyrim Together Reborn** and wait for the readiness
+   checklist to go green — it checks everything (game version, Address
+   Library, plugins, Proton) so nothing fails silently.
+4. Press **Launch Together**. In-game, press **F2** to open the multiplayer
+   menu, create a party, and invite your friends.
 
-| Step | Windows | Linux (incl. Steam Deck) |
-| --- | --- | --- |
-| Find Skyrim SE via Steam | Registry + `libraryfolders.vdf` | `libraryfolders.vdf` (native + Flatpak Steam) **+ fallback scan of `/mnt`, `/media`, `/run/media` for libraries on other drives** |
-| Download **Address Library (All in One)** | Nexus API | Nexus API |
-| Download **Skyrim Together Reborn** | Nexus API | Nexus API |
-| Place files (exe + `Data/` merge) | ✅ tracked by manifest | ✅ tracked by manifest |
-| Remove bundled Creation Club content (Survival, Fishing, Curios, Elite Merchandise) | ✅ backed up first | ✅ backed up first |
-| Enable `SkyrimTogether.esp` in `Plugins.txt` | ✅ | ✅ (every existing profile location) |
-| STR finds `SkyrimSE.exe` (no picker dialog) | `HKCU\Software\TiltedPhoques\TiltedEvolution` registry keys | Proton prefix `user.reg` (`TitleExe` / `TitlePath`) |
-| Correct Proton | — | GE-Proton **10** selected for Skyrim in Steam (`config.vdf`), auto-downloaded if missing |
-| Launch via Steam starts multiplayer | — | Choose a **launch mode** (Settings): either launcher replacement (`SkyrimSELauncher.exe` → `SkyrimTogether.exe`, original kept as `_SkyrimSELauncher.exe`) + protonfixes localfix, **or** a separate *"Skyrim Together Reborn"* game in your Steam library with full SteamGridDB artwork (hero, grids, logo, recolored icon) |
-| Shortcuts | — (the STR Launcher tool itself is the launcher; use **Launch Together**) | Application entry + Desktop `.desktop` + standalone launch script with `STEAM_COMPAT_DATA_PATH` |
-| Undo / uninstall | ✅ restores everything | ✅ restores everything (either mode) |
+> ⚠️ Finish the Helgen intro *before* connecting to a server — see the
+> official [play guide](https://wiki.tiltedphoques.com/tilted-online/general-information/playguide)
+> (one minute, well worth it).
 
-The tool **never deletes** anything without keeping a backup: removed CC content
-goes to `steamapps/str-cc-backup/`, the original launcher is renamed, and a
-`.str-launcher-manifest.json` in the game folder records every file the launcher
-installed so updates and uninstall are clean.
+### No API key? Offline mode
 
-### Launch modes (Linux)
+Download the two archives manually —
+[Skyrim Together Reborn](https://www.nexusmods.com/skyrimspecialedition/mods/69993?tab=files)
+and
+[Address Library](https://www.nexusmods.com/skyrimspecialedition/mods/32444?tab=files) —
+drop them in under Settings → Offline mode, and press Install. No key needed.
 
-| | Replace the Skyrim launcher | Add a separate Steam game |
-| --- | --- | --- |
-| Starting Skyrim via Steam | launches STR directly | launches vanilla Skyrim |
-| New Steam library entry | — | ✅ "Skyrim Together Reborn" with its own artwork |
-| Skyrim game folder | launcher exe symlinked | 100% untouched |
-| Undo | restores original launcher | removes the Steam entry + artwork |
+### Playing with friends
 
-Both modes share the same generated launch script (`launch-skyrim-together.sh`),
-which drives Proton with the game's own prefix — so the in-app **Launch
-Together** button, the Steam entry and the desktop shortcut behave identically.
+- **Same network / internet:** one of you hosts. Open the **Server** tab, download
+  the dedicated server, press start, and friends connect with your IP
+  (Settings let you set the port, name and password).
+- Keep it simple: create **one party** per playthrough and let one person lead
+  the quests — the game syncs quests through the party.
 
-> **Why GE-Proton 10?** GE-Proton 11 (Wine 11) closes Skyrim Together Reborn 1.8
-> right after launch — the launcher pins and installs GE-Proton 10 by default
-> (same choice as the SteamDeckSTR reference implementation).
+## Good to know
 
----
-
-## Steam only — GOG / Epic users read this
-
-Automatic detection and the Steam launch integrations (Proton selection, the
-launcher replacement, `steam://` launching) are **Steam-only** by design — the
-mod itself is distributed for the Steam build of Skyrim Special Edition.
-GOG / Epic / Heroic users can still use the installer: run *Settings → Game →
-Browse…* and select the folder containing `SkyrimSE.exe`.
-Everything except the Steam-specific launch paths works the same.
-
-## Usage
-
-1. **Have Skyrim Special Edition (Steam, v1.6+) installed** and launch it once
-   through Steam (reach the main menu, then quit). Anniversary Upgrade DLC is
-   *not* needed and is recommended to be disabled.
-2. **Download and run STR Launcher.** It detects your install automatically.
-3. Press **Install Skyrim Together Reborn**. The tool downloads, extracts,
-   cleans, and configures everything. The **Launch readiness** checklist shows
-   every precondition (game build, Address Library, Plugins.txt, Proton tool,
-   prefix registry, launch mode) so nothing fails silently.
-4. Press **Launch Together** — or start the game through Steam / the desktop
-   shortcut, depending on your launch mode. In-game, press **F2** (or
-   **Right Ctrl**) to open the multiplayer menu, create a party, and play.
-   *Complete the Helgen intro first — see the official [play guide](https://wiki.tiltedphoques.com/tilted-online/general-information/playguide).*
-
-### Nexus API key (one time)
-
-Automatic downloads use the official Nexus Mods API with **your personal API
-key** (Account Settings → API keys — the very bottom of the page — *Personal use*). The key is stored locally in the
-app config and is only ever sent to `api.nexusmods.com`. Paste it under
-Settings → Nexus Mods, or skip the network entirely:
-
-### Offline mode
-
-Prefer downloading manually? Grab the latest archives from Nexus
-([STR](https://www.nexusmods.com/skyrimspecialedition/mods/69993?tab=files) ·
-[Address Library](https://www.nexusmods.com/skyrimspecialedition/mods/32444?tab=files)),
-drop them into Settings → Offline mode, and press Install. No API key
-needed.
-
-### Dedicated server (optional)
-
-The **Server** section downloads the latest dedicated server, lets you edit
-`config/STServer.ini` (port, name, password, player count, mod check) and
-launches it — natively on Windows, under the game's Proton on Linux.
-
----
-
-## Building
-
-Requirements: Rust 1.77+ (stable).
-
-```bash
-# Linux (needs the usual wayland/x11 dev bits for winit; on Arch:
-#   pacman -S base-devel wayland libxkbcommon libx11)
-cargo build --release
-
-# Windows (in a MSVC environment)
-cargo build --release
-```
-
-The binary is self-contained; there is no installer and no runtime dependency on
-Vortex, MO2, SKSE, SteamCMD, or any scripting runtime.
+- **Nothing is deleted without a backup.** Removed Creation Club content goes
+  to `str-cc-backup/`, and a manifest in the game folder records every file the
+  launcher touched — **Undo** restores your Skyrim to exactly how it was.
+- **GOG / Epic?** Automatic Steam detection and the Steam launch integrations
+  are Steam-only (the mod itself is built for Steam), but the installer still
+  works: point it at your `SkyrimSE.exe` under Settings → Game → Browse.
+- **Linux:** the launcher pins **GE-Proton 10** automatically (GE-Proton 11
+  crashes Skyrim Together 1.8) and offers two launch modes — replace the
+  Skyrim launcher, or add a separate *"Skyrim Together Reborn"* entry to your
+  Steam library with its own artwork. Both are fully reversible with Undo.
 
 ## Troubleshooting
 
-- **"Skyrim Together is not running!"** — Run the launcher's *Undo*, then
-  *Install* again; it re-applies the launcher replacement and protonfix.
-- **Crash on connect** — Make sure bundled Creation Club content was removed
-  (the launcher does this by default) and that all players run the same STR
-  version (use *Check updates*).
-- **Black screen in Game Mode (Steam Deck)** — This happens if the old
-  `SteamGameId=302190` launch option is set; this launcher's fix avoids adding
-  it. Remove any custom launch options for Skyrim in Steam.
-- **Steam compatibility tool** — If Steam still uses an old Proton, pick the
-  GE-Proton 10 entry manually under *Properties → Compatibility*; the launcher
-  attempts this automatically (it briefly restarts Steam when needed).
-- The launcher logs every step in the activity pane; the data folder is
-  reachable via Settings → Open downloads.
+- **"Skyrim Together is not running!"** — Press **Undo**, then **Install** again.
+- **Crash on connect** — All players must run the same STR version (use
+  *Check updates*). The launcher already removes bundled Creation Club content;
+  don't add other mods — they're the #1 cause of crashes with Skyrim Together.
+- **Steam Deck black screen** — Remove any old custom launch options for
+  Skyrim in Steam (this launcher doesn't need them).
+- **Wrong Proton in use** — Steam → Skyrim → Properties → Compatibility → pick
+  *GE-Proton 10*. The launcher normally sets this for you.
 
-## Project layout
+The activity pane in the launcher logs every step; Downloads are reachable via
+Settings → Open downloads.
 
+---
+
+## Building from source
+
+Requires Rust 1.77+ (stable).
+
+```bash
+# Linux (needs wayland/x11 dev bits; on Arch:
+#   pacman -S base-devel wayland libxkbcommon libx11)
+cargo build --release
+
+# Windows (MSVC environment)
+cargo build --release
 ```
-src/                    Every area lives in its own str-<module>/ directory
-├── main.rs             Iced bootstrap + module wiring
-├── str-app/            UI state, update loop and the four tabs
-│                       (mod.rs / update.rs / view.rs / widgets.rs / tab_*.rs)
-├── str-ui/             Theme + styles
-├── str-config/         Persistent config (mod.rs) and app dirs + fs helpers (paths.rs)
-├── str-game/           Game probes: checks, cc_clean, plugins, pe_version
-├── str-archive/        ZIP / tar.gz extraction with traversal protection
-├── str-steam/          Steam library scanning (mod.rs), VDF parsing (vdf.rs),
-│                       GE-Proton discovery / install / selection (proton.rs)
-├── str-entry/          Steam game entry mode: steam_entry (mod.rs),
-│                       binary shortcuts.vdf (shortcuts_vdf.rs), artwork (sgdb.rs)
-├── str-nexus/          Nexus Mods API v1 client (mod.rs) and the async
-│                       downloader with retry + resume (download.rs)
-├── str-install/        The automated install/undo pipeline (the heart):
-│                       step orchestration (mod.rs), progress events
-│                       (reporter.rs), file merging (files.rs), Linux setup
-│                       (linux_setup.rs), uninstall (undo.rs)
-├── str-launch/         Launchers for game / vanilla / server
-├── str-server/         Dedicated server download + STServer.ini editing
-└── str-platform/       Windows (registry, .lnk), Linux (proton, .desktop)
-                        and macOS stub, selected at compile time
-```
+
+The binary is self-contained — no installer, no runtime dependencies.
+Every push to `main` is built by CI for
+[Windows and Linux](.github/workflows/ci.yml); binaries land in the run's
+artifacts.
 
 ## Credits
 
