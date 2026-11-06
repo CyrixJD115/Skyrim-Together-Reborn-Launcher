@@ -65,7 +65,6 @@ pub enum Message {
     LaunchModePicked(crate::config::LaunchMode),
     TabSelected(Tab),
     ToggleCleanCc(bool),
-    ToggleShortcuts(bool),
     BrowseOffline(u8),
     OfflinePicked(u8, Option<PathBuf>),
     ClearOffline(u8),
@@ -241,7 +240,6 @@ impl App {
                 .clone()
                 .unwrap_or_else(crate::proton::default_tool_name),
             clean_cc: self.cfg.clean_cc,
-            create_shortcuts: self.cfg.create_shortcuts,
             launch_mode: self.cfg.launch_mode,
             dirs,
             cc_backup_dir,

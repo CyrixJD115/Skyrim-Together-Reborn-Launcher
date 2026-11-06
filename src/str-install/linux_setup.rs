@@ -16,10 +16,7 @@ pub(super) async fn configure_linux(
     params: &Params,
     rep: &Reporter,
     warnings: &mut Vec<String>,
-    shortcuts: &mut Vec<String>,
 ) -> Result<(), String> {
-    use crate::platform::linux as plat;
-
     let game_dir = &params.game_dir;
     let steam_root = resolve_steam_root(params);
     apply_proton_tool(params, rep, steam_root.as_deref(), warnings).await;
@@ -50,10 +47,6 @@ pub(super) async fn configure_linux(
 
     // Desktop entries (both modes — always a handy shortcut).
     write_desktop_entries(&script, rep, warnings).await;
-    if params.create_shortcuts {
-        let entry = plat::desktop_entry_dir().join("str-launcher-skyrim-together.desktop");
-        shortcuts.push(entry.display().to_string());
-    }
 
     Ok(())
 }

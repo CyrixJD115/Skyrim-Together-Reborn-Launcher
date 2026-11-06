@@ -9,10 +9,11 @@
 //!    a manifest for clean updates and undo.
 //! 4. Back up and remove the bundled Creation Club content (known to break
 //!    STR multiplayer).
-//! 5. Enable `SkyrimTogether.esp` in every existing `Plugins.txt` location.
+//! 5. Enable `SkyrimTogether.esp` in every existing `Plugins.txt` location
+//!    (when the STR archive ships one).
 //! 6. Platform configuration:
-//!    - Windows: STR's registry keys (skips the "select SkyrimSE.exe" dialog)
-//!      plus Start Menu / desktop shortcuts.
+//!    - Windows: STR's registry keys (skips the "select SkyrimSE.exe" dialog).
+//!      No shortcuts are created — the STR Launcher tool stays the one way in.
 //!    - Linux: GE-Proton install + selection in Steam, launcher replacement,
 //!      protonfixes, Proton-prefix registry keys and a standalone launch
 //!      script + desktop entry (see [`linux_setup`]).
@@ -49,7 +50,6 @@ pub struct InstallSummary {
     pub game_version: Option<String>,
     pub cc_removed: Vec<String>,
     pub warnings: Vec<String>,
-    pub shortcuts: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -64,7 +64,6 @@ pub struct Params {
     pub offline_al: Option<PathBuf>,
     pub proton_tool: String,
     pub clean_cc: bool,
-    pub create_shortcuts: bool,
     pub launch_mode: LaunchMode,
     pub dirs: crate::paths::AppDirs,
     /// Where CC backups go (kept next to the game library to stay on the same
@@ -93,8 +92,8 @@ async fn run_inner(params: &Params, rep: &Reporter) -> Result<InstallSummary, St
     let str_version_label = str_meta.as_ref().map(mod_version_label).or(extracted_version);
 
     let cc_removed = clean_creation_club(params, rep, &game_dir, &mut warnings).await;
-    enable_plugins(params, rep, &data_dir, &mut warnings).await;
-    let shortcuts = configure_platform(params, rep, &mut warnings).await?;
+    enable_plugins(params, rep, &data_dir).await;
+    configure_platform(params, rep, &mut warnings).await?;
 
     // ---------- Persist manifest + config summary ----------
     let manifest = InstallManifest {
@@ -113,7 +112,6 @@ async fn run_inner(params: &Params, rep: &Reporter) -> Result<InstallSummary, St
         game_version,
         cc_removed,
         warnings,
-        shortcuts,
     })
 }
 
@@ -434,11 +432,17 @@ async fn clean_creation_club(
 // ---------------------------------------------------------------------------
 
 /// Enable `SkyrimTogether.esp` in every existing Plugins.txt location.
-async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path, warnings: &mut Vec<String>) {
+///
+/// Current Skyrim Together archives ship no `.esp` plugin at all, so finding
+/// none is normal — not a warning. Anything that does ship one gets enabled.
+async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path) {
     rep.step("Enabling SkyrimTogether.esp", 7).await;
     let str_plugins = plugins::find_str_plugins(data_dir);
     if str_plugins.is_empty() {
-        warnings.push("No SkyrimTogether*.esp plugin found in the game's Data folder.".into());
+        rep.log(
+            "This Skyrim Together version ships no .esp plugin — no Plugins.txt entry is needed.",
+        )
+        .await;
     }
     let mut plugin_locations_updated = 0;
     for profile_dir in crate::plugins::candidate_game_profile_dirs(&params.game_dir) {
@@ -452,7 +456,7 @@ async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path, warnin
             }
         }
     }
-    if plugin_locations_updated == 0 {
+    if plugin_locations_updated == 0 && !str_plugins.is_empty() {
         rep.log(
             "No Plugins.txt found yet — the game will auto-load SkyrimTogether.esp on its next \
              launch (it is created after the first run).",
@@ -465,38 +469,27 @@ async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path, warnin
 // Step 8: platform configuration
 // ---------------------------------------------------------------------------
 
-/// Windows: STR registry keys + shortcuts. Linux: the full GE-Proton /
-/// launcher-replacement / Steam-entry setup ([`linux_setup::configure_linux`]).
-async fn configure_platform(
-    params: &Params,
-    rep: &Reporter,
-    warnings: &mut Vec<String>,
-) -> Result<Vec<String>, String> {
+/// Windows: STR registry keys so SkyrimTogether finds SkyrimSE.exe (no file
+/// picker dialog). No shortcuts are created — the STR Launcher tool itself is
+/// the way in. Linux: the full GE-Proton / launcher-replacement / Steam-entry
+/// setup ([`linux_setup::configure_linux`]).
+async fn configure_platform(params: &Params, rep: &Reporter, warnings: &mut Vec<String>) -> Result<(), String> {
     rep.step("Configuring launch integration", 8).await;
-    let mut shortcuts: Vec<String> = Vec::new();
     #[cfg(target_os = "windows")]
     {
+        let _ = warnings; // only the Linux path collects warnings here
         let game_dir = &params.game_dir;
         platform::native::write_str_registry(game_dir)
             .map_err(|e| format!("writing STR registry keys failed: {e}"))?;
         rep.log("Registry keys written (SkyrimTogether will find SkyrimSE.exe automatically).")
             .await;
-        if params.create_shortcuts {
-            match platform::native::create_shortcuts(game_dir) {
-                Ok(created) => {
-                    rep.log(format!("Created shortcuts: {}", created.join(", "))).await;
-                    shortcuts = created;
-                }
-                Err(e) => warnings.push(format!("Shortcut creation failed: {e}")),
-            }
-        }
     }
     #[cfg(all(unix, not(target_os = "macos")))]
-    linux_setup::configure_linux(params, rep, warnings, &mut shortcuts).await?;
+    linux_setup::configure_linux(params, rep, warnings).await?;
     #[cfg(target_os = "macos")]
     let _ = (params, rep, warnings);
 
-    Ok(shortcuts)
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -586,7 +579,6 @@ mod tests {
             offline_al: None,
             proton_tool: crate::steam::DEFAULT_PROTON_TOOL.to_string(),
             clean_cc: true,
-            create_shortcuts: true,
             launch_mode: LaunchMode::LauncherReplacement,
             dirs: crate::paths::AppDirs {
                 config: root.join("app/config"),
@@ -611,6 +603,15 @@ mod tests {
         let root = std::env::temp_dir().join(format!("str-e2e-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
+
+        // Windows resolves Plugins.txt locations through %USERPROFILE%; point
+        // it at the fake prefix user dir so the test never touches the real
+        // profile (Linux reaches the same dir via compat_dir_for).
+        #[cfg(target_os = "windows")]
+        std::env::set_var(
+            "USERPROFILE",
+            root.join("steamapps/compatdata/489830/pfx/drive_c/users/steamuser"),
+        );
 
         // Fake game install.
         let game = root.join("steamapps/common/Skyrim Special Edition");

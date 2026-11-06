@@ -350,11 +350,6 @@ impl App {
                 self.save_cfg();
                 Task::none()
             }
-            Message::ToggleShortcuts(v) => {
-                self.cfg.create_shortcuts = v;
-                self.save_cfg();
-                Task::none()
-            }
             Message::LaunchModePicked(mode) => {
                 self.cfg.launch_mode = mode;
                 self.save_cfg();
