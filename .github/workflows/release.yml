@@ -72,6 +72,9 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
+      - name: Flatten zips into CWD (upload-action reads `filename` from CWD)
+        run: |
+          mv -v linux-zip/*.zip windows-zip/*.zip .
       - name: Create GitHub release with both zips
         env:
           GH_TOKEN: ${{ github.token }}
