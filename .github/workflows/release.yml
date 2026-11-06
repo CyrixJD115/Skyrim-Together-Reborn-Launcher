@@ -89,6 +89,9 @@ jobs:
           else
             git log "$GITHUB_REF_NAME" --pretty=format:"- %s" --no-merges | head -40 > changelog.txt
           fi
+          # --pretty=format: emits no trailing newline; the GITHUB_OUTPUT
+          # delimiter must sit on its own line.
+          printf '\n' >> changelog.txt
           { echo 'text<<CHANGELOG_EOF'; cat changelog.txt; echo 'CHANGELOG_EOF'; } >> "$GITHUB_OUTPUT"
       - name: Upload Windows to Nexus (archives previous version)
         uses: Nexus-Mods/upload-action@v1.0.0-beta.11
