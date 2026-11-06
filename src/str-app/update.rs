@@ -50,8 +50,14 @@ impl App {
                     Ok(d) => {
                         self.cfg = cfg;
                         self.api_key = self.cfg.nexus_api_key.clone();
-                        if let Some(active) = self.cfg.active().proton_tool.clone() {
-                            self.proton_selected = Some(active);
+                        // Honor the saved pick only while the tool still exists;
+                        // a stale entry would otherwise override GE-Proton10
+                        // forever (the readiness check flags bad picks anyway).
+                        let saved = self.cfg.active().proton_tool.clone();
+                        if let Some(active) = saved {
+                            if self.proton_names.contains(&active) {
+                                self.proton_selected = Some(active);
+                            }
                         }
                         self.dirs = Some(d);
                     }

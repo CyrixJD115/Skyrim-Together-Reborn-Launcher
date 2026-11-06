@@ -207,11 +207,20 @@ fn linux_checks(dir: &Path, checks: &mut Vec<Check>, input: &Input<'_>) {
         roots.insert(0, root.to_path_buf());
     }
     let tool = crate::proton::find_tool(&roots, input.proton_tool);
+    // STR 1.8 closes instantly on Wine 11 (Proton 11 / Experimental); GE-Proton
+    // 10 is the tested family, so anything else fails this check with the fix.
+    let is_ge10 = input.proton_tool.starts_with("GE-Proton10");
     checks.push(Check::new(
-        tool.is_some(),
+        tool.is_some() && is_ge10,
         "Proton tool",
         match &tool {
-            Some(t) => format!("{} ({})", t.name, t.path.display()),
+            Some(t) if is_ge10 => format!("{} ({})", t.name, t.path.display()),
+            Some(t) => format!(
+                "{} is installed and selected, but STR 1.8 closes instantly on Wine 11 builds \
+                 (Proton 11 / Experimental). Pick GE-Proton10 in Settings — or press Install, \
+                 which selects it automatically.",
+                t.name
+            ),
             None => format!(
                 "{name} not found — press Install to download it into Steam",
                 name = input.proton_tool
