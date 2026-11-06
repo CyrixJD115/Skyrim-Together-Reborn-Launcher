@@ -16,11 +16,8 @@ use crate::paths::APP_VERSION;
 use crate::ui::{self, FONT_CINZEL, FONT_CINZEL_BOLD};
 
 /// The solid-white Skyrim Together dragon (vector), bundled into the binary.
+/// Used for the window icon and the corner watermark.
 const LOGO_SVG: &[u8] = include_bytes!("../../assets/logo.svg");
-/// Corner-art variant of the dragon: same art, but with a tall empty margin
-/// above it so the oversized watermark can be cropped through empty space at
-/// the top while the art itself bleeds off the bottom/right window frame.
-const WATERMARK_SVG: &[u8] = include_bytes!("../../assets/watermark.svg");
 
 /// Content width shared by the header and every tab.
 const CONTENT_WIDTH: f32 = 820.0;
@@ -60,32 +57,24 @@ pub fn view(app: &App) -> Element<'_, Message> {
     main.into()
 }
 
-/// The oversized dragon corner art: fills the bottom-right half of the
-/// window (flush with the frame) and is scaled with `Cover`, so it is larger
-/// than its area and the window frame crops it — the emblem bleeds off the
-/// bottom and the right edges, like the Skyrim menu's corner art. `Cover`
-/// crops symmetrically, and the watermark asset's tall empty top margin
-/// absorbs the top-side crop invisibly while pinning the art low.
+/// The dragon corner art: a fixed-size emblem anchored to the bottom-right
+/// corner of the window, drawn as the bottom layer under the UI. It never
+/// scales or crops with the window, so any size — including a WM-forced
+/// maximize — keeps the art intact and just shows more (or less) backdrop
+/// around it, like the Skyrim menu.
 fn watermark() -> Element<'static, Message> {
-    let dragon = svg(svg::Handle::from_memory(WATERMARK_SVG.to_vec()))
-        .content_fit(iced::ContentFit::Cover)
+    // Box matches the logo's viewBox aspect (356.87×520 ≈ 0.686) exactly.
+    let dragon = svg(svg::Handle::from_memory(LOGO_SVG.to_vec()))
+        .width(Length::Fixed(400.0))
+        .height(Length::Fixed(583.0))
+        .content_fit(iced::ContentFit::Contain)
         .opacity(WATERMARK_OPACITY);
-    // Carve out the right-hand half of the window, then its bottom three
-    // fifths; the emblem fills that corner and overflows past it.
-    row![
-        space::horizontal(),
-        column![
-            space::vertical().height(Length::FillPortion(2)),
-            container(dragon)
-                .width(Length::Fill)
-                .height(Length::FillPortion(3)),
-        ]
+    container(dragon)
+        .align_x(iced::alignment::Horizontal::Right)
+        .align_y(iced::alignment::Vertical::Bottom)
         .width(Length::Fill)
-        .height(Length::Fill),
-    ]
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .into()
+        .height(Length::Fill)
+        .into()
 }
 
 fn tab_page(app: &App) -> Element<'_, Message> {
