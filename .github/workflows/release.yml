@@ -82,7 +82,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --title "STR Launcher $VERSION" --generate-notes || true
           gh release upload "$GITHUB_REF_NAME" \
-            linux-zip/STR-Launcher-*.zip windows-zip/STR-Launcher-*.zip --clobber
+            STR-Launcher-*.zip --clobber
       - name: Changelog since previous tag
         id: cl
         run: |
