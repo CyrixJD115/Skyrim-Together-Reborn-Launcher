@@ -78,10 +78,12 @@ fn dark_theme(_app: &app::App) -> iced::Theme {
     iced::Theme::Dark
 }
 
-/// The window is composed as one fixed canvas — the corner dragon art bleeds
-/// off the frame at exactly this size — so the window neither resizes nor
-/// maximizes. Close and minimize still work.
-const WINDOW_SIZE: iced::Size = iced::Size::new(1020.0, 820.0);
+/// The corner dragon art is composed to bleed off the frame at this size, so
+/// the window may resize freely *within* these bounds but never past them —
+/// in particular it can never grow large enough for the art to re-crop.
+const WINDOW_MAX: iced::Size = iced::Size::new(1020.0, 820.0);
+/// Smallest readable layout: content scrolls below this, never squashes.
+const WINDOW_MIN: iced::Size = iced::Size::new(880.0, 640.0);
 
 fn main() -> iced::Result {
     iced::application(app::boot, app::update, app::view)
@@ -90,9 +92,10 @@ fn main() -> iced::Result {
         .font(include_bytes!("../assets/fonts/Cinzel-Regular.ttf").as_slice())
         .font(include_bytes!("../assets/fonts/Cinzel-Bold.ttf").as_slice())
         .window(iced::window::Settings {
-            size: WINDOW_SIZE,
-            max_size: Some(WINDOW_SIZE),
-            resizable: false,
+            size: WINDOW_MAX,
+            min_size: Some(WINDOW_MIN),
+            max_size: Some(WINDOW_MAX),
+            resizable: true,
             icon: window_icon(),
             ..Default::default()
         })
