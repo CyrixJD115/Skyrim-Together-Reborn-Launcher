@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=STR Launcher
+GenericName=Skyrim Together Reborn Launcher
+Comment=One-click install and launch for Skyrim Together Reborn
+Exec=str-launcher
+Icon=str-launcher
+Categories=Game;Utility;
+Keywords=skyrim;together;multiplayer;reborn;
+Terminal=false
+StartupWMClass=str-launcher

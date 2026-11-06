@@ -28,10 +28,16 @@ jobs:
         run: cargo test
       - name: Build
         run: cargo build --release
+      - name: Package AppImage
+        run: |
+          sudo apt-get install -y libfuse2
+          scripts/make-appimage.sh dist
       - uses: actions/upload-artifact@v4
         with:
           name: str-launcher-linux
-          path: target/release/str-launcher
+          path: |
+            target/release/str-launcher
+            dist/STR-Launcher.AppImage
 
   windows:
     name: Windows — clippy, build
