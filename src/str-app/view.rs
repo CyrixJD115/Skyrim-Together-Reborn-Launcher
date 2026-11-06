@@ -123,21 +123,24 @@ fn tab_scroll_id(tab: Tab) -> &'static str {
 // ---------------------------------------------------------------------------
 
 fn header(app: &App) -> Element<'_, Message> {
-    // Brand: small dragon + wordmark + version, above the tab row.
+    // Brand: dragon emblem + wordmark + version, above the tab row. The
+    // logo box keeps the asset's viewBox aspect (356.87×520 ≈ 0.686), so the
+    // dragon renders without distortion.
     let brand = row![
         svg(svg::Handle::from_memory(LOGO_SVG.to_vec()))
-            .width(Length::Fixed(22.0))
-            .height(Length::Fixed(32.0)),
+            .width(Length::Fixed(44.0))
+            .height(Length::Fixed(64.0))
+            .content_fit(iced::ContentFit::Contain),
         column![
-            text("STR LAUNCHER").size(17).font(FONT_CINZEL_BOLD).color(ui::TEXT),
+            text("STR LAUNCHER").size(27).font(FONT_CINZEL_BOLD).color(ui::TEXT),
             text(format!("MULTIPLAYER LAUNCHER · v{APP_VERSION}"))
-                .size(10)
+                .size(12)
                 .font(FONT_CINZEL)
                 .color(ui::GOLD),
         ]
-        .spacing(1),
+        .spacing(4),
     ]
-    .spacing(12)
+    .spacing(16)
     .align_y(iced::Alignment::Center);
 
     let inner = column![
@@ -152,11 +155,11 @@ fn header(app: &App) -> Element<'_, Message> {
         .align_y(iced::Alignment::Center),
         ornament(),
     ]
-    .spacing(10)
+    .spacing(12)
     .max_width(CONTENT_WIDTH);
 
     container(inner)
-        .padding(iced::Padding { top: 14.0, right: 26.0, bottom: 6.0, left: 26.0 })
+        .padding(iced::Padding { top: 18.0, right: 26.0, bottom: 8.0, left: 26.0 })
         .center_x(Length::Fill)
         .width(Length::Fill)
         .into()
@@ -191,8 +194,8 @@ fn tabs(app: &App) -> Element<'static, Message> {
 }
 
 fn tab_btn(label: &'static str, tab: Tab, active: Tab) -> iced::widget::Button<'static, Message> {
-    button(text(label).size(12).font(FONT_CINZEL_BOLD))
-        .padding([8, 16])
+    button(text(label).size(13).font(FONT_CINZEL_BOLD))
+        .padding([8, 18])
         .style(ui::tab_button(tab == active))
         .on_press(Message::TabSelected(tab))
 }

@@ -78,6 +78,11 @@ fn dark_theme(_app: &app::App) -> iced::Theme {
     iced::Theme::Dark
 }
 
+/// The window is composed as one fixed canvas — the corner dragon art bleeds
+/// off the frame at exactly this size — so the window neither resizes nor
+/// maximizes. Close and minimize still work.
+const WINDOW_SIZE: iced::Size = iced::Size::new(1020.0, 820.0);
+
 fn main() -> iced::Result {
     iced::application(app::boot, app::update, app::view)
         .title(title)
@@ -85,8 +90,9 @@ fn main() -> iced::Result {
         .font(include_bytes!("../assets/fonts/Cinzel-Regular.ttf").as_slice())
         .font(include_bytes!("../assets/fonts/Cinzel-Bold.ttf").as_slice())
         .window(iced::window::Settings {
-            size: iced::Size::new(1020.0, 820.0),
-            min_size: Some(iced::Size::new(880.0, 640.0)),
+            size: WINDOW_SIZE,
+            max_size: Some(WINDOW_SIZE),
+            resizable: false,
             icon: window_icon(),
             ..Default::default()
         })
