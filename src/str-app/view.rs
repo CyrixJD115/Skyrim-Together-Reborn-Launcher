@@ -57,23 +57,32 @@ pub fn view(app: &App) -> Element<'_, Message> {
     main.into()
 }
 
-/// The dragon corner art: a fixed-size emblem anchored to the bottom-right
-/// corner of the window, drawn as the bottom layer under the UI. It never
-/// scales or crops with the window, so any size — including a WM-forced
-/// maximize — keeps the art intact and just shows more (or less) backdrop
-/// around it, like the Skyrim menu.
+/// The dragon corner art: an oversized "stamp" bleeding off the bottom-right
+/// corner of the window, drawn as the bottom layer under the UI. Negative
+/// right/bottom padding expands the layout area past the window bounds, so
+/// the corner-pinned dragon hangs off the frame; the compositor clips the
+/// overflow. (Fixed sizes are clamped by iced's layout limits, so padding is
+/// the only way to push a widget past the edge.)
 fn watermark() -> Element<'static, Message> {
-    // Box matches the logo's viewBox aspect (356.87×520 ≈ 0.686) exactly.
-    let dragon = svg(svg::Handle::from_memory(LOGO_SVG.to_vec()))
-        .width(Length::Fixed(400.0))
-        .height(Length::Fixed(583.0))
-        .content_fit(iced::ContentFit::Contain)
-        .opacity(WATERMARK_OPACITY);
-    container(dragon)
+    // How far the dragon hangs past the 1020×820 max window: the bleed.
+    let bleed = iced::Padding { top: 0.0, right: -150.0, bottom: -270.0, left: 0.0 };
+    container(dragon())
         .align_x(iced::alignment::Horizontal::Right)
         .align_y(iced::alignment::Vertical::Bottom)
         .width(Length::Fill)
         .height(Length::Fill)
+        .padding(bleed)
+        .into()
+}
+
+/// The oversized dragon itself. Box matches the logo's viewBox aspect
+/// (356.87×520 ≈ 0.686) exactly.
+fn dragon() -> Element<'static, Message> {
+    svg(svg::Handle::from_memory(LOGO_SVG.to_vec()))
+        .width(Length::Fixed(560.0))
+        .height(Length::Fixed(817.0))
+        .content_fit(iced::ContentFit::Contain)
+        .opacity(WATERMARK_OPACITY)
         .into()
 }
 
