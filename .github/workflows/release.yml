@@ -1,0 +1,126 @@
+name: Release
+
+# Tag a version (v0.2.0) and everything publishes itself:
+# builds both platforms, zips them, creates the GitHub release and pushes
+# both files to the Nexus mod page (archiving the previous versions).
+# The tag must match the version in Cargo.toml or the run fails.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    name: Linux — build + AppImage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install build bits (winit) + libfuse2 (appimagetool)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libxcb1-dev libxrandr-dev libxi-dev libgl1-mesa-dev libfuse2
+      - name: Build + package AppImage
+        run: scripts/make-appimage.sh dist
+      - name: Zip for Nexus
+        run: |
+          cd dist
+          zip "STR-Launcher-${GITHUB_REF_NAME#v}-Linux.zip" "STR-Launcher.AppImage"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-zip
+          path: dist/STR-Launcher-*.zip
+
+  build-windows:
+    name: Windows — build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release
+      - name: Zip for Nexus
+        shell: pwsh
+        run: |
+          Copy-Item target/release/str-launcher.exe STR-Launcher.exe
+          Compress-Archive -Path STR-Launcher.exe -DestinationPath "STR-Launcher-$($env:GITHUB_REF_NAME -replace '^v','')-Windows.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: STR-Launcher-*.zip
+
+  publish:
+    name: GitHub release + Nexus upload
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-windows]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Guard — tag version must match Cargo.toml
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          CARGO_VERSION=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "$VERSION" != "$CARGO_VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $CARGO_VERSION — bump Cargo.toml first"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+      - name: Create GitHub release with both zips
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "STR Launcher $VERSION" --generate-notes || true
+          gh release upload "$GITHUB_REF_NAME" \
+            linux-zip/STR-Launcher-*.zip windows-zip/STR-Launcher-*.zip --clobber
+      - name: Changelog since previous tag
+        id: cl
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          if [ -n "$PREV" ]; then
+            git log "$PREV..$GITHUB_REF_NAME" --pretty=format:"- %s" --no-merges > changelog.txt
+          else
+            git log "$GITHUB_REF_NAME" --pretty=format:"- %s" --no-merges | head -40 > changelog.txt
+          fi
+          { echo 'text<<CHANGELOG_EOF'; cat changelog.txt; echo 'CHANGELOG_EOF'; } >> "$GITHUB_OUTPUT"
+      - name: Upload Windows to Nexus (archives previous version)
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.11
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: "8326518"
+          mod_id: "7318624470610"
+          filename: STR-Launcher-${{ env.VERSION }}-Windows.zip
+          version: ${{ env.VERSION }}
+          display_name: STR Launcher ${{ env.VERSION }} — Windows
+          description: >-
+            One-click Skyrim Together Reborn installer & launcher for Windows.
+            Requires Skyrim Special Edition v1.6+ (Steam). See the README for
+            the full feature list.
+          changelog: ${{ steps.cl.outputs.text }}
+          category: main
+          archive_existing_version: true
+          update_mod_version: true
+      - name: Upload Linux to Nexus (archives previous version)
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.11
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: "8326533"
+          mod_id: "7318624470610"
+          filename: STR-Launcher-${{ env.VERSION }}-Linux.zip
+          version: ${{ env.VERSION }}
+          display_name: STR Launcher ${{ env.VERSION }} — Linux
+          description: >-
+            One-click Skyrim Together Reborn installer & launcher for Linux
+            (AppImage; any distro with a desktop, Steam Deck included). Pins
+            GE-Proton 10 automatically. See the README for the full feature list.
+          changelog: ${{ steps.cl.outputs.text }}
+          category: main
+          archive_existing_version: true
+          update_mod_version: true
