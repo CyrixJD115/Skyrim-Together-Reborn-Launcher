@@ -104,7 +104,7 @@ jobs:
           mod_id: "7318624470610"
           filename: STR-Launcher-${{ env.VERSION }}-Windows.zip
           version: ${{ env.VERSION }}
-          display_name: STR Launcher ${{ env.VERSION }} — Windows
+          display_name: STR Launcher ${{ env.VERSION }} - Windows
           description: >-
             One-click Skyrim Together Reborn installer & launcher for Windows.
             Requires Skyrim Special Edition v1.6+ (Steam). See the README for
@@ -121,7 +121,7 @@ jobs:
           mod_id: "7318624470610"
           filename: STR-Launcher-${{ env.VERSION }}-Linux.zip
           version: ${{ env.VERSION }}
-          display_name: STR Launcher ${{ env.VERSION }} — Linux
+          display_name: STR Launcher ${{ env.VERSION }} - Linux
           description: >-
             One-click Skyrim Together Reborn installer & launcher for Linux
             (AppImage; any distro with a desktop, Steam Deck included). Pins
