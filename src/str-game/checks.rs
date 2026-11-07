@@ -155,9 +155,10 @@ fn address_library_version(name: &str) -> Option<(String, [u64; 4])> {
 
 /// Any known Plugins.txt location lists SkyrimTogether.esp?
 ///
-/// Current Skyrim Together archives ship no `.esp` plugin at all (STR injects
-/// itself at runtime), so a missing plugin entry is only a problem when a
-/// `SkyrimTogether*.esp` actually exists in the game's Data folder.
+/// Skyrim Together 1.8+ ships `SkyrimTogether.esp` and
+/// `SkyrimTogetherQuestPatches.esp`; older archives ship none and inject at
+/// runtime. So a missing entry only matters when a `SkyrimTogether*` plugin
+/// actually exists in the game's Data folder.
 fn check_plugins(game_dir: &Path) -> (bool, String) {
     let str_plugins = crate::plugins::find_str_plugins(&game_dir.join("Data"));
     let mut locations = Vec::new();
@@ -190,7 +191,7 @@ fn check_plugins(game_dir: &Path) -> (bool, String) {
     } else if !found_any {
         (
             false,
-            "no Plugins.txt yet — it is created on the game's first run".to_string(),
+            "no Plugins.txt yet — press Install to create one".to_string(),
         )
     } else if enabled > 0 {
         (true, format!("SkyrimTogether.esp enabled in {enabled} location(s)"))

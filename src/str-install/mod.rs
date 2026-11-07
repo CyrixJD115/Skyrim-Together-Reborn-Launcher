@@ -431,9 +431,13 @@ async fn clean_creation_club(
 // Step 7: Plugins.txt
 // ---------------------------------------------------------------------------
 
-/// Enable `SkyrimTogether.esp` in every existing Plugins.txt location.
+/// Enable the SkyrimTogether esps (plus `_ResourcePack.esl`, which no STR esp
+/// masters) in every existing Plugins.txt location, and create a canonical
+/// one when none exists — a fresh Proton prefix has no Plugins.txt until the
+/// game's first run, and without entries STR's client rejects the install
+/// with its "not purely vanilla" dialog.
 ///
-/// Current Skyrim Together archives ship no `.esp` plugin at all, so finding
+/// Older Skyrim Together archives ship no `.esp` plugin at all, so finding
 /// none is normal — not a warning. Anything that does ship one gets enabled.
 async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path) {
     rep.step("Enabling SkyrimTogether.esp", 7).await;
@@ -444,24 +448,33 @@ async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path) {
         )
         .await;
     }
+    let mut ensure: Vec<String> = plugins::BASE_PLUGINS.iter().map(|p| p.to_string()).collect();
+    ensure.extend(str_plugins.iter().cloned());
     let mut plugin_locations_updated = 0;
     for profile_dir in crate::plugins::candidate_game_profile_dirs(&params.game_dir) {
         let plugins_txt = profile_dir.join("Plugins.txt");
         if plugins_txt.is_file() {
             let mut text = std::fs::read_to_string(&plugins_txt).unwrap_or_default();
-            plugins::update_plugins_text(&mut text, &str_plugins);
+            plugins::update_plugins_text(&mut text, &ensure);
             if atomic_write(&plugins_txt, text.as_bytes()).is_ok() {
                 plugin_locations_updated += 1;
                 rep.log(format!("Updated {}", plugins_txt.display())).await;
             }
         }
     }
-    if plugin_locations_updated == 0 && !str_plugins.is_empty() {
-        rep.log(
-            "No Plugins.txt found yet — the game will auto-load SkyrimTogether.esp on its next \
-             launch (it is created after the first run).",
-        )
-        .await;
+    if plugin_locations_updated == 0 {
+        match plugins::primary_plugins_txt_path(&params.game_dir) {
+            Some(plugins_txt) => {
+                if let Some(dir) = plugins_txt.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                match atomic_write(&plugins_txt, plugins::canonical_plugins_text(&str_plugins).as_bytes()) {
+                    Ok(()) => rep.log(format!("Created {}", plugins_txt.display())).await,
+                    Err(e) => rep.log(format!("Could not create {}: {e}", plugins_txt.display())).await,
+                }
+            }
+            None => rep.log("No Plugins.txt location found to create one in.").await,
+        }
     }
 }
 
@@ -710,6 +723,59 @@ mod tests {
         params2.offline_al = Some(al_zip);
         run_and_wait(params2).await.expect("update install should succeed");
         assert_eq!(std::fs::read(game.join("SkyrimTogether.exe")).unwrap(), b"st-exe-v2");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Install into a fresh Proton prefix: no Plugins.txt exists anywhere, so
+    /// the pipeline must create a canonical one (base set + `_ResourcePack.esl`
+    /// + the shipped esps, in STR's expected order) instead of relying on the
+    /// game's first run.
+    #[tokio::test]
+    async fn install_creates_plugins_txt_when_missing() {
+        std::env::set_var("STR_LAUNCHER_TEST_MODE", "1");
+        let root = std::env::temp_dir().join(format!("str-e2e-new-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+
+        #[cfg(target_os = "windows")]
+        std::env::set_var(
+            "USERPROFILE",
+            root.join("steamapps/compatdata/489830/pfx/drive_c/users/steamuser"),
+        );
+
+        let game = root.join("steamapps/common/Skyrim Special Edition");
+        std::fs::create_dir_all(game.join("Data")).unwrap();
+        std::fs::write(game.join("SkyrimSE.exe"), fake_exe()).unwrap();
+        std::fs::write(game.join("Data/Skyrim.esm"), b"skyrim").unwrap();
+
+        let str_zip = root.join("str.zip");
+        make_zip(
+            &str_zip,
+            &[
+                ("SkyrimTogetherReborn/SkyrimTogether.exe", b"st-exe"),
+                ("SkyrimTogetherReborn/Data/SkyrimTogether.esp", b"esp"),
+                ("SkyrimTogetherReborn/Data/SkyrimTogetherQuestPatches.esp", b"qp"),
+            ],
+        );
+        let al_zip = root.join("al.zip");
+        make_zip(&al_zip, &[("SKSE/Plugins/version-1-6-1170-0.dll", b"all-in-one")]);
+
+        let mut params = test_params(&root);
+        params.offline_str = Some(str_zip);
+        params.offline_al = Some(al_zip);
+        run_and_wait(params).await.expect("pipeline should succeed");
+
+        let plugins_txt = root
+            .join("steamapps/compatdata/489830/pfx/drive_c/users/steamuser")
+            .join("AppData/Local/Skyrim Special Edition/Plugins.txt");
+        let text = std::fs::read_to_string(&plugins_txt).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], "# This file is used by Skyrim to keep track of your downloaded content.");
+        assert_eq!(lines[2], "*Skyrim.esm");
+        assert_eq!(lines[7], "*_ResourcePack.esl");
+        assert_eq!(lines[8], "*SkyrimTogether.esp");
+        assert_eq!(lines[9], "*SkyrimTogetherQuestPatches.esp");
 
         let _ = std::fs::remove_dir_all(&root);
     }
