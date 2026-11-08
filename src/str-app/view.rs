@@ -10,7 +10,7 @@ use super::tab_client;
 use super::tab_info;
 use super::tab_server;
 use super::tab_settings;
-use super::widgets::{link_btn, ornament, secondary_btn, LINK_APIKEY};
+use super::widgets::{link_btn, ornament, secondary_btn, LINK_APIKEY, LINK_RELEASES};
 use super::{App, Banner, Message, Phase, Tab};
 use crate::paths::APP_VERSION;
 use crate::ui::{self, FONT_CINZEL, FONT_CINZEL_BOLD};
@@ -37,9 +37,17 @@ const TABS: [(Tab, &str); 3] = [
 pub fn view(app: &App) -> Element<'_, Message> {
     let mut root = column![header(app)].spacing(0);
 
-    if let Some(banner) = banner(app) {
+    let any_banner = banner(app).is_some() || update_banner(app).is_some();
+    let mut banners = column![].spacing(8);
+    if let Some(b) = banner(app) {
+        banners = banners.push(b);
+    }
+    if let Some(b) = update_banner(app) {
+        banners = banners.push(b);
+    }
+    if any_banner {
         root = root.push(
-            container(column![banner].max_width(CONTENT_WIDTH))
+            container(banners.max_width(CONTENT_WIDTH))
                 .padding(iced::Padding { top: 10.0, right: 26.0, bottom: 0.0, left: 26.0 })
                 .center_x(Length::Fill)
                 .width(Length::Fill),
@@ -273,8 +281,43 @@ pub fn offline_row<'a>(app: &'a App, which: u8, label: &'a str) -> Element<'a, M
 }
 
 // ---------------------------------------------------------------------------
-// Banner
+// Banners
 // ---------------------------------------------------------------------------
+
+/// Non-blocking "a newer launcher release exists" banner: one click opens the
+/// releases page; never installs anything and never blocks other actions.
+fn update_banner(app: &App) -> Option<Element<'_, Message>> {
+    let latest = app.launcher_update.as_ref()?;
+    let line = row![
+        text("◆").size(11).color(ui::GOLD_BRIGHT),
+        text(format!(
+            "STR Launcher {latest} is available (you are running {APP_VERSION})."
+        ))
+        .size(13)
+        .width(Length::Fill)
+        .wrapping(iced::widget::text::Wrapping::Word),
+        link_btn("OPEN RELEASES", LINK_RELEASES),
+        button(text("✕").size(11))
+            .padding([3, 8])
+            .style(ui::secondary_button())
+            .on_press(Message::DismissUpdateBanner),
+    ]
+    .spacing(10)
+    .align_y(iced::Alignment::Center);
+
+    Some(
+        container(line)
+            .padding([10, 14])
+            .width(Length::Fill)
+            .style(|theme| {
+                let mut s = ui::card(theme);
+                s.border.color = ui::GOLD;
+                s.border.width = 1.0;
+                s
+            })
+            .into(),
+    )
+}
 
 fn banner(app: &App) -> Option<Element<'_, Message>> {
     let (msg, accent, bright) = match &app.banner {

@@ -291,6 +291,31 @@ impl App {
                     Message::UpdatesChecked,
                 )
             }
+            Message::SelfUpdateChecked(result) => {
+                match result {
+                    Ok(Some(latest)) => {
+                        tracing::info!(
+                            "launcher update available: {latest} (running {})",
+                            crate::paths::APP_VERSION
+                        );
+                        self.launcher_update = Some(latest);
+                    }
+                    Ok(None) => {
+                        tracing::info!("launcher is up to date (v{})", crate::paths::APP_VERSION)
+                    }
+                    Err(e) => {
+                        // A failed update check must never nag the user at
+                        // startup — it just stays in the file log.
+                        tracing::warn!("launcher self-update check failed: {e}");
+                    }
+                }
+                Task::none()
+            }
+            Message::DismissUpdateBanner => {
+                self.launcher_update = None;
+                Task::none()
+            }
+
             Message::UpdatesChecked(result) => {
                 self.checking = false;
                 match result {

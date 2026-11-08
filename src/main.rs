@@ -39,6 +39,8 @@ mod platform;
 mod plugins;
 #[path = "str-steam/proton.rs"]
 mod proton;
+#[path = "str-release/mod.rs"]
+mod release;
 #[path = "str-server/mod.rs"]
 mod server;
 #[cfg(all(unix, not(target_os = "macos")))]

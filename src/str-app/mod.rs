@@ -56,6 +56,8 @@ pub enum Message {
     VanillaResult(Result<(), String>),
     CheckUpdates,
     UpdatesChecked(Result<Option<String>, String>),
+    SelfUpdateChecked(Result<Option<String>, String>),
+    DismissUpdateBanner,
     ApiKeyChanged(String),
     GamePathChanged(String),
     GamePathSubmitted,
@@ -167,6 +169,9 @@ pub struct App {
     pub(crate) server_ini: Option<(PathBuf, ServerSettings)>,
     pub(crate) server_inputs: [String; 5], // port, name, password, max players, modcheck
     pub(crate) checking: bool,
+    /// Version of a newer published launcher release (None = up to date or
+    /// the check failed/has not run). Rendered as its own non-blocking banner.
+    pub(crate) launcher_update: Option<String>,
     pub(crate) checks: Vec<crate::checks::Check>,
     /// Launch-readiness checklist expanded? Collapsed by default — the
     /// header row shows the summary either way.
@@ -202,10 +207,34 @@ impl App {
             server_ini: None,
             server_inputs: Default::default(),
             checking: false,
+            launcher_update: None,
             checks: Vec::new(),
             show_checks: false,
         };
-        (app, Task::perform(load(), |r| Message::Loaded(Box::new(r))))
+        (
+            app,
+            Task::batch([
+                Task::perform(load(), |r| Message::Loaded(Box::new(r))),
+                // Non-blocking self-update check: query the published
+                // releases once at startup, compare semantically, and let the
+                // view show a dismissible banner. Never auto-installs.
+                Task::perform(
+                    async {
+                        match crate::release::latest(crate::release::LAUNCHER_REPO).await {
+                            Ok(release) => {
+                                let newer = crate::release::is_newer(
+                                    crate::paths::APP_VERSION,
+                                    &release.tag_name,
+                                );
+                                Ok(newer.then_some(release.tag_name))
+                            }
+                            Err(e) => Err(e),
+                        }
+                    },
+                    Message::SelfUpdateChecked,
+                ),
+            ]),
+        )
     }
 
     pub(crate) fn push_log(&mut self, line: impl Into<String>) {

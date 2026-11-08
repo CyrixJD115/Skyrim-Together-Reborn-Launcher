@@ -13,6 +13,10 @@ pub const LINK_WIKI: &str =
 pub const LINK_PLAYGUIDE: &str =
     "https://wiki.tiltedphoques.com/tilted-online/general-information/playguide";
 pub const LINK_APIKEY: &str = "https://www.nexusmods.com/settings/api-keys";
+/// "Open releases" target for the self-update banner (GitHub redirects
+/// /releases/latest to the newest published release).
+pub const LINK_RELEASES: &str =
+    "https://github.com/CyrixJD115/Skyrim-Together-Reborn-Launcher/releases/latest";
 
 pub fn card<'a>(content: iced::widget::Column<'a, Message>) -> Element<'a, Message> {
     container(content.spacing(10))
