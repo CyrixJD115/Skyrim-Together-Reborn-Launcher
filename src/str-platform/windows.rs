@@ -33,6 +33,65 @@ pub fn steam_roots() -> Vec<PathBuf> {
     roots
 }
 
+/// Non-Steam Skyrim installs: GOG Galaxy (registry), Epic manifests, Heroic
+/// books and the usual manual-install folders.
+pub fn extra_game_dirs(steam_roots: &[PathBuf]) -> Vec<PathBuf> {
+    let _ = steam_roots;
+    let mut out = Vec::new();
+
+    // GOG Galaxy: every game registers under GOG.com\Games with a "path".
+    for (hive, sub) in [
+        (winreg::enums::HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\GOG.com\Games"),
+        (winreg::enums::HKEY_LOCAL_MACHINE, r"SOFTWARE\GOG.com\Games"),
+    ] {
+        if let Ok(games) = winreg::RegKey::predef(hive).open_subkey(sub) {
+            for key in games.enum_keys().flatten() {
+                if let Ok(game) = games.open_subkey(&key) {
+                    if let Ok(path) = game.get_value::<String, _>("path") {
+                        let dir = PathBuf::from(path);
+                        if crate::other_stores::is_skyrim_dir(&dir) && !out.contains(&dir) {
+                            out.push(dir);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Epic Games Launcher manifests.
+    if let Ok(programdata) = std::env::var("PROGRAMDATA") {
+        for dir in crate::other_stores::epic_manifests(&PathBuf::from(&programdata)
+            .join("Epic/EpicGamesLauncher/Data/Manifests")) {
+            if !out.contains(&dir) {
+                out.push(dir);
+            }
+        }
+    }
+
+    // Heroic (legendary / gogdl / nile books) under %APPDATA%.
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        for dir in crate::other_stores::heroic_installed(&PathBuf::from(&appdata)) {
+            if !out.contains(&dir) {
+                out.push(dir);
+            }
+        }
+    }
+
+    // Manual installs in the usual spots.
+    let home = std::env::var("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    for dir in crate::other_stores::common_dirs(&home) {
+        if !out.contains(&dir) {
+            out.push(dir);
+        }
+    }
+    out
+}
+
+/// The HKCU key STR reads TitleExe/TitlePath from.
+pub const STR_REGISTRY_KEY: &str = r"Software\TiltedPhoques\TiltedEvolution\Skyrim Special Edition";
+
 /// Write the registry values Skyrim Together uses to locate SkyrimSE.exe, so
 /// the "select your SkyrimSE.exe" dialog never appears.
 pub fn write_str_registry(game_dir: &Path) -> PlatformResult<()> {
@@ -41,7 +100,7 @@ pub fn write_str_registry(game_dir: &Path) -> PlatformResult<()> {
         return Err("SkyrimSE.exe not found in the game folder".into());
     }
     let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
-    let key_path = r"Software\TiltedPhoques\TiltedEvolution\Skyrim Special Edition";
+    let key_path = STR_REGISTRY_KEY;
     let (key, _) = hkcu
         .create_subkey(key_path)
         .map_err(|e| format!("failed to create registry key {key_path}: {e}"))?;
@@ -99,7 +158,7 @@ pub fn spawn_detached(program: &Path, args: &[&str], cwd: &Path) -> PlatformResu
 }
 
 /// Is the Steam client running?
-pub fn steam_running() -> bool {
+pub fn is_steam_running() -> bool {
     let out = Command::new("tasklist")
         .args(["/FI", "IMAGENAME eq steam.exe", "/FO", "CSV", "/NH"])
         .creation_flags(CREATE_NO_WINDOW)
@@ -110,9 +169,43 @@ pub fn steam_running() -> bool {
     }
 }
 
+/// Ask Steam to shut down cleanly (it flushes shortcuts.vdf and config.vdf
+/// on exit, so edits require a stopped client).
+pub fn shutdown_steam() {
+    if let Some(root) = steam_roots().first() {
+        let _ = Command::new(root.join("steam.exe"))
+            .arg("-shutdown")
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn();
+    }
+}
+
+/// Start Steam again.
+pub fn launch_steam() {
+    if let Some(root) = steam_roots().first() {
+        let _ = Command::new(root.join("steam.exe"))
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn();
+    }
+}
+
+/// Delete the registry key STR wrote (`TitleExe`/`TitlePath`). Missing key is
+/// success (nothing to undo).
+pub fn remove_str_registry() -> PlatformResult<()> {
+    use winreg::enums::HKEY_CURRENT_USER;
+    let key_path = STR_REGISTRY_KEY;
+    let hkcu = winreg::RegKey::predef(HKEY_CURRENT_USER);
+    let exists = hkcu.open_subkey(key_path).is_ok();
+    if !exists {
+        return Ok(());
+    }
+    hkcu.delete_subkey(key_path)
+        .map_err(|e| format!("failed to delete registry key {key_path}: {e}"))
+}
+
 /// Best-effort start of the Steam client (Skyrim needs it for steam_api).
 pub fn ensure_steam_running() {
-    if !steam_running() {
+    if !is_steam_running() {
         if let Some(root) = steam_roots().first() {
             let _ = Command::new(root.join("steam.exe"))
                 .arg("-silent")

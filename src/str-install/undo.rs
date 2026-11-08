@@ -31,11 +31,10 @@ pub(super) async fn undo_inner(params: &Params, rep: &Reporter) -> Result<(), St
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         linux_setup::restore_launcher(&game_dir, rep).await;
-        let plan = crate::steam_entry::EntryPlan {
-            script: params.dirs.scripts.join("launch-skyrim-together.sh"),
-            start_dir: game_dir.clone(),
-            icon: std::path::PathBuf::new(),
-        };
+        let plan = crate::steam_entry::plan_for(
+            &game_dir,
+            Some(params.dirs.scripts.join("launch-skyrim-together.sh")),
+        );
         crate::steam_entry::remove(Some(&plan), rep).await;
     }
     #[cfg(not(all(unix, not(target_os = "macos"))))]
@@ -44,6 +43,19 @@ pub(super) async fn undo_inner(params: &Params, rep: &Reporter) -> Result<(), St
         let launcher = game_dir.join("SkyrimSELauncher.exe");
         if backup.is_file() && !launcher.exists() {
             let _ = std::fs::rename(&backup, &launcher);
+        }
+        // Windows also had a Steam library entry + registry keys.
+        #[cfg(target_os = "windows")]
+        {
+            let plan = crate::steam_entry::plan_for(&game_dir, None);
+            crate::steam_entry::remove(Some(&plan), rep).await;
+            for key in &manifest.registry_keys {
+                let _ = key; // recorded for auditing; the one STR key is fixed
+            }
+            match crate::platform::native::remove_str_registry() {
+                Ok(()) => rep.log("STR registry keys removed.").await,
+                Err(e) => rep.log(format!("registry cleanup failed: {e}")).await,
+            }
         }
     }
 

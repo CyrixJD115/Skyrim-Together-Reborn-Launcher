@@ -34,7 +34,8 @@ pub fn steam_roots() -> Vec<PathBuf> {
 }
 
 pub fn is_steam_running() -> bool {
-    // Read /proc directly: no pgrep dependency needed.
+    // Read /proc directly: no pgrep dependency needed. Flatpak Steam shows up
+    // the same way (its client process is still named "steam").
     if let Ok(entries) = std::fs::read_dir("/proc") {
         for entry in entries.flatten() {
             if let Ok(comm) = std::fs::read_to_string(entry.path().join("comm")) {
@@ -45,6 +46,53 @@ pub fn is_steam_running() -> bool {
         }
     }
     false
+}
+
+/// Is a Flatpak Steam installation present?
+pub fn flatpak_steam_present() -> bool {
+    std::env::var("HOME")
+        .ok()
+        .map(|home| {
+            PathBuf::from(home)
+                .join(".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps")
+                .is_dir()
+        })
+        .unwrap_or(false)
+}
+
+/// Is the native `steam` command available (native install on PATH)?
+fn native_steam_command_available() -> bool {
+    std::env::var("PATH")
+        .ok()
+        .map(|paths| {
+            paths.split(':').any(|dir| {
+                !dir.is_empty() && PathBuf::from(dir).join("steam").is_file()
+            })
+        })
+        .unwrap_or(false)
+}
+
+/// Ask Steam to shut down cleanly, using the right client (native command or
+/// Flatpak) for the install that actually exists.
+pub fn shutdown_steam() {
+    if !native_steam_command_available() && flatpak_steam_present() {
+        let _ = Command::new("flatpak")
+            .args(["run", "--command=steam", "com.valvesoftware.Steam", "-shutdown"])
+            .spawn();
+    } else {
+        let _ = Command::new("steam").arg("-shutdown").spawn();
+    }
+}
+
+/// Start Steam again (native command or Flatpak).
+pub fn launch_steam() {
+    if !native_steam_command_available() && flatpak_steam_present() {
+        let _ = Command::new("flatpak")
+            .args(["run", "com.valvesoftware.Steam"])
+            .spawn();
+    } else {
+        let _ = Command::new("steam").spawn();
+    }
 }
 
 pub fn desktop_entry_dir() -> PathBuf {

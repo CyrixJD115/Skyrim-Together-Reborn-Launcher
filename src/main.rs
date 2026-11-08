@@ -45,15 +45,14 @@ mod proton;
 mod release;
 #[path = "str-server/mod.rs"]
 mod server;
-#[cfg(all(unix, not(target_os = "macos")))]
 #[path = "str-entry/sgdb.rs"]
 mod sgdb;
-#[cfg(all(unix, not(target_os = "macos")))]
 #[path = "str-entry/shortcuts_vdf.rs"]
 mod shortcuts_vdf;
+#[path = "str-platform/other_stores.rs"]
+mod other_stores;
 #[path = "str-steam/mod.rs"]
 mod steam;
-#[cfg(all(unix, not(target_os = "macos")))]
 #[path = "str-entry/mod.rs"]
 mod steam_entry;
 #[path = "str-install/mod.rs"]

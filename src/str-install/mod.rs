@@ -27,7 +27,9 @@ mod linux_setup;
 mod reporter;
 mod undo;
 
-pub use reporter::{Event, Reporter, ThrottledProgress};
+pub use reporter::{Event, Reporter};
+#[cfg(all(unix, not(target_os = "macos")))]
+pub use reporter::ThrottledProgress;
 
 use std::path::{Path, PathBuf};
 
@@ -103,7 +105,7 @@ async fn run_inner(params: &Params, rep: &Reporter) -> Result<InstallSummary, St
         &mut warnings,
     )
     .await;
-    configure_platform(params, rep, &mut warnings).await?;
+    let registry_keys = configure_platform(params, rep, &mut warnings).await?;
 
     // ---------- Persist manifest + config summary ----------
     let manifest = InstallManifest {
@@ -112,6 +114,7 @@ async fn run_inner(params: &Params, rep: &Reporter) -> Result<InstallSummary, St
         address_library_version: al_version.clone(),
         address_library_file_id: al_meta.as_ref().map(|m| m.file_id),
         files: installed_files,
+        registry_keys,
         installed_at: crate::paths::unix_now(),
     };
     manifest.save(&game_dir).map_err(|e| format!("saving manifest: {e}"))?;
@@ -552,27 +555,39 @@ async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path) -> Res
 // Step 8: platform configuration
 // ---------------------------------------------------------------------------
 
+/// Platform launch integration. Returns the registry key paths written (on
+/// Windows, for the install manifest so Undo reverts exactly what was set).
+///
 /// Windows: STR registry keys so SkyrimTogether finds SkyrimSE.exe (no file
-/// picker dialog). No shortcuts are created — the STR Launcher tool itself is
-/// the way in. Linux: the full GE-Proton / launcher-replacement / Steam-entry
+/// picker dialog) plus a "Skyrim Together Reborn" Steam library entry with
+/// artwork. Linux: the full GE-Proton / launcher-replacement / Steam-entry
 /// setup ([`linux_setup::configure_linux`]).
-async fn configure_platform(params: &Params, rep: &Reporter, warnings: &mut Vec<String>) -> Result<(), String> {
+async fn configure_platform(params: &Params, rep: &Reporter, warnings: &mut Vec<String>) -> Result<Vec<String>, String> {
     rep.step("Configuring launch integration", 8).await;
     #[cfg(target_os = "windows")]
     {
-        let _ = warnings; // only the Linux path collects warnings here
         let game_dir = &params.game_dir;
         platform::native::write_str_registry(game_dir)
             .map_err(|e| format!("writing STR registry keys failed: {e}"))?;
         rep.log("Registry keys written (SkyrimTogether will find SkyrimSE.exe automatically).")
             .await;
+
+        // The Steam library entry works the same way as on Linux, minus the
+        // Proton launch script (Steam runs SkyrimTogether.exe directly).
+        let plan = crate::steam_entry::plan_for(game_dir, None);
+        crate::steam_entry::ensure(&plan, rep, warnings).await;
+        Ok(vec![platform::native::STR_REGISTRY_KEY.to_string()])
     }
     #[cfg(all(unix, not(target_os = "macos")))]
-    linux_setup::configure_linux(params, rep, warnings).await?;
+    {
+        linux_setup::configure_linux(params, rep, warnings).await?;
+        Ok(Vec::new())
+    }
     #[cfg(target_os = "macos")]
-    let _ = (params, rep, warnings);
-
-    Ok(())
+    {
+        let _ = (params, rep, warnings);
+        Ok(Vec::new())
+    }
 }
 
 // ---------------------------------------------------------------------------

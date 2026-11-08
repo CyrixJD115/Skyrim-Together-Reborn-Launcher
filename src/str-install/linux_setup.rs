@@ -36,11 +36,7 @@ pub(super) async fn configure_linux(
         }
         LaunchMode::SteamGame => {
             restore_launcher(game_dir, rep).await;
-            let plan = crate::steam_entry::EntryPlan {
-                script: script.clone(),
-                start_dir: game_dir.clone(),
-                icon: PathBuf::new(), // filled in by steam_entry from the grid artwork
-            };
+            let plan = crate::steam_entry::plan_for(game_dir, Some(script.clone()));
             crate::steam_entry::ensure(&plan, rep, warnings).await;
         }
     }

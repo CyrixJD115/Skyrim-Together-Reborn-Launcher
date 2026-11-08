@@ -180,6 +180,10 @@ pub struct InstallManifest {
     pub address_library_file_id: Option<u64>,
     /// Game-root relative file paths installed by us.
     pub files: Vec<String>,
+    /// Registry key paths (Windows) written by the installer, so Undo can
+    /// revert exactly what was created.
+    #[serde(default)]
+    pub registry_keys: Vec<String>,
     pub installed_at: u64,
 }
 

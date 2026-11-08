@@ -36,3 +36,11 @@ pub fn spawn_detached(
 }
 
 pub fn ensure_steam_running() {}
+
+pub fn is_steam_running() -> bool {
+    false
+}
+
+pub fn shutdown_steam() {}
+
+pub fn launch_steam() {}

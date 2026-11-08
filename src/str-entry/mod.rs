@@ -1,12 +1,11 @@
-//! The "add a Steam game" launch mode (Linux): registers Skyrim Together
-//! Reborn as its own entry in Steam's non-Steam shortcut list, complete with
-//! SteamGridDB artwork.
+//! The "add a Steam game" launch mode: registers Skyrim Together Reborn as
+//! its own entry in Steam's non-Steam shortcut list, complete with SteamGridDB
+//! artwork — on Linux *and* Windows.
 //!
-//! The shortcut's `exe` is the generated launch script (never the game exe),
-//! so Steam can start it natively while the script itself drives Proton with
-//! the real Skyrim prefix (`compatdata/489830`). This avoids Steam creating a
-//! second Proton prefix for the shortcut — STR's registry keys and the game's
-//! prefix stay in one place.
+//! The shortcut's `exe` is the generated launch script on Linux (never the
+//! game exe, so Steam starts it natively while the script drives Proton with
+//! the real Skyrim prefix, avoiding a second Proton prefix); on Windows it is
+//! `SkyrimTogether.exe` itself.
 //!
 //! `shortcuts.vdf` must be edited while Steam is *not* running (Steam rewrites
 //! the file from memory on exit), so Steam is paused around the edit and
@@ -18,14 +17,23 @@ use crate::shortcuts_vdf::{self, ShortcutSpec};
 use crate::str_install::Reporter;
 
 pub const APP_NAME: &str = "Skyrim Together Reborn";
-/// Identifies script-backed entries when matching/removing.
+
+/// Identifies our entries when matching/removing: a stable substring of the
+/// `exe` we register on this platform (Linux: the launch script; Windows: the
+/// game exe).
+#[cfg(all(unix, not(target_os = "macos")))]
+pub const EXE_TAG: &str = "launch-skyrim-together.sh";
+#[cfg(target_os = "windows")]
+pub const EXE_TAG: &str = "SkyrimTogether.exe";
+#[cfg(target_os = "macos")]
 pub const EXE_TAG: &str = "launch-skyrim-together.sh";
 
 /// Everything needed to (re)create the entry.
 #[derive(Debug, Clone)]
 pub struct EntryPlan {
-    /// The generated launch script — becomes the shortcut's `exe`.
-    pub script: PathBuf,
+    /// What Steam runs for this entry: the generated launch script on Linux,
+    /// `SkyrimTogether.exe` on Windows.
+    pub exe: PathBuf,
     /// The Skyrim Special Edition folder — becomes `startdir`.
     pub start_dir: PathBuf,
     /// A PNG used for the shortcut's `icon` field (already written to disk).
@@ -38,7 +46,7 @@ impl EntryPlan {
         let quoted = |p: &PathBuf| format!("\"{}\"", p.display());
         ShortcutSpec {
             app_name: APP_NAME.to_string(),
-            exe: quoted(&self.script),
+            exe: quoted(&self.exe),
             start_dir: quoted(&self.start_dir),
             icon: if self.icon.as_os_str().is_empty() {
                 String::new()
@@ -47,6 +55,15 @@ impl EntryPlan {
             },
         }
     }
+}
+
+/// The entry plan for this machine's game folder (mode-independent exe pick).
+pub fn plan_for(game_dir: &Path, #[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(unused_variables))] launch_script: Option<PathBuf>) -> EntryPlan {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let exe = launch_script.unwrap_or_else(|| game_dir.join("SkyrimTogether.exe"));
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    let exe = game_dir.join("SkyrimTogether.exe");
+    EntryPlan { exe, start_dir: game_dir.to_path_buf(), icon: PathBuf::new() }
 }
 
 /// Every logged-in Steam account's `config` dir, across all Steam roots
@@ -274,12 +291,12 @@ async fn pause_steam<T>(rep: &Reporter, action: impl FnOnce() -> T) -> Result<T,
     if std::env::var("STR_LAUNCHER_TEST_MODE").is_ok() {
         return Ok(action());
     }
-    let was_running = crate::platform::linux::is_steam_running();
+    let was_running = crate::platform::native::is_steam_running();
     if was_running {
         rep.log("Restarting Steam so the shortcut file can be edited…".to_string()).await;
-        let _ = std::process::Command::new("steam").arg("-shutdown").spawn();
+        crate::platform::native::shutdown_steam();
         for _ in 0..30 {
-            if !crate::platform::linux::is_steam_running() {
+            if !crate::platform::native::is_steam_running() {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -289,7 +306,7 @@ async fn pause_steam<T>(rep: &Reporter, action: impl FnOnce() -> T) -> Result<T,
     let result = action();
 
     if was_running {
-        let _ = std::process::Command::new("steam").spawn();
+        crate::platform::native::launch_steam();
         rep.log("Steam restarted.".to_string()).await;
     }
     Ok(result)

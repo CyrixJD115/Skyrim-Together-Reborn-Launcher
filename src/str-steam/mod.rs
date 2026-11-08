@@ -199,10 +199,32 @@ fn root_fallback(lib: &Path, roots: &[PathBuf]) -> PathBuf {
         .unwrap_or_else(|| lib.to_path_buf())
 }
 
-/// Convenience: detect all installs using platform roots.
+/// Convenience: detect all installs using platform roots. Steam libraries are
+/// scanned first; on Windows, GOG Galaxy / Epic / Heroic / common manual
+/// install locations are appended so their users get detection for free.
 pub fn detect() -> Vec<GameInstall> {
     let roots = steam_roots();
-    find_installs(&roots)
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+    let mut installs = find_installs(&roots);
+    #[cfg(target_os = "windows")]
+    for dir in crate::platform::native::extra_game_dirs(&roots) {
+        if !installs.iter().any(|i| i.game_dir == dir) {
+            installs.push(GameInstall {
+                game_dir: dir.clone(),
+                library: dir.parent().unwrap_or(&dir).to_path_buf(),
+                // Store installs have no Steam library of their own; fall back
+                // to the registry-detected Steam root (or the game's parent)
+                // so launch code that wants Steam keeps working.
+                steam_root: roots
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| dir.parent().unwrap_or(&dir).to_path_buf()),
+                compat_dir: None,
+                build_id: None,
+            });
+        }
+    }
+    installs
 }
 
 #[cfg_attr(target_os = "windows", allow(dead_code))]
