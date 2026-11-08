@@ -516,13 +516,8 @@ impl App {
                     self.phase = Phase::GettingServer;
                     self.push_log("── Downloading the dedicated server ──");
                     pipe_task(move |tx| async move {
-                        let mut prog =
-                            str_install::ThrottledProgress::new(tx.clone(), "Downloading server".into());
-                        match crate::server::ensure_server(&key, offline, &dirs, &mut |d, t| {
-                            prog.send(d, t)
-                        })
-                        .await
-                        {
+                        let rep = str_install::Reporter::new(tx.clone());
+                        match crate::server::ensure_server(&key, offline, &dirs, &rep).await {
                             Ok(dir) => {
                                 let _ = tx
                                     .send(PipeEvent::Log(format!(

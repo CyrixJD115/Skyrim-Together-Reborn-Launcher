@@ -14,11 +14,25 @@ use serde::Deserialize;
 
 /// The repository that publishes launcher releases.
 pub const LAUNCHER_REPO: &str = "CyrixJD115/Skyrim-Together-Reborn-Launcher";
+/// The official Skyrim Together repository — the server-download fallback.
+pub const TILTED_REPO: &str = "TiltedPhoques/TiltedEvolution";
+
+/// One release asset (name + download URL).
+#[derive(Debug, Clone, Deserialize)]
+pub struct Asset {
+    pub name: String,
+    #[serde(rename = "browser_download_url")]
+    pub download_url: String,
+    #[serde(default)]
+    pub size: u64,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LatestRelease {
     #[serde(rename = "tag_name")]
     pub tag_name: String,
+    #[serde(default)]
+    pub assets: Vec<Asset>,
 }
 
 /// GET `repos/<repo>/releases/latest` (plain download path, no API key).
@@ -74,6 +88,43 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     }
 }
 
+/// Pick the dedicated-server archive from a TiltedPhoques release. Preference
+/// order:
+/// 1. a zip that names the server explicitly,
+/// 2. the Windows client bundle (it bundles `SkyrimTogetherServer.exe`, so it
+///    works with the zip extraction + Proton launch path on every platform).
+///
+/// Debug-symbol archives are skipped. Native Linux server tarballs are *not*
+/// picked: the launcher drives the server through its existing exe/Proton
+/// flow (see [`crate::server`]).
+pub fn server_zip_asset(release: &LatestRelease) -> Option<&Asset> {
+    let is_zip = |a: &Asset| a.name.to_lowercase().ends_with(".zip");
+    let useful = |a: &Asset| is_zip(a) && !a.name.to_lowercase().contains("debug");
+    // 1. An archive that names the server explicitly.
+    let server_named = release
+        .assets
+        .iter()
+        .find(|a| useful(a) && a.name.to_lowercase().contains("server"));
+    if let Some(a) = server_named {
+        return Some(a);
+    }
+    // 2. The Windows client bundle (contains SkyrimTogetherServer.exe),
+    //    preferring the plain x64 build over the SSE-version-pinned variants.
+    let mut bundles = release.assets.iter().filter(|a| {
+        useful(a)
+            && a.name.to_lowercase().contains("skyrimtogether")
+            && a.name.to_lowercase().contains("windows")
+    });
+    let plain = bundles.find(|a| !a.name.to_lowercase().contains("sse"));
+    plain.or_else(|| {
+        release.assets.iter().find(|a| {
+            useful(a)
+                && a.name.to_lowercase().contains("skyrimtogether")
+                && a.name.to_lowercase().contains("windows")
+        })
+    })
+}
+
 /// Is `latest` (a release tag or bare version) newer than `running`?
 pub fn is_newer(running: &str, latest: &str) -> bool {
     compare_versions(running, latest) == std::cmp::Ordering::Less
@@ -122,5 +173,43 @@ mod tests {
             serde_json::from_str(r#"{"tag_name": "v0.1.1", "html_url": "https://example.com"}"#)
                 .unwrap();
         assert_eq!(release.tag_name, "v0.1.1");
+        assert!(release.assets.is_empty());
+    }
+
+    #[test]
+    fn server_asset_matches_the_real_tilted_release_shape() {
+        let mk = |name: &str| Asset {
+            name: name.into(),
+            download_url: format!("https://example.com/{name}"),
+            size: 100,
+        };
+        // The actual v1.8.4 asset list (sizes trimmed).
+        let release = LatestRelease {
+            tag_name: "v1.8.4".into(),
+            assets: vec![
+                mk("SkyrimTogether-1.8.4-windows-x64-debug-symbols.zip"),
+                mk("SkyrimTogether-1.8.4-windows-x64-sse1.6.1170-debug-symbols.zip"),
+                mk("SkyrimTogether-1.8.4-windows-x64-sse1.6.1170.zip"),
+                mk("SkyrimTogether-1.8.4-windows-x64.zip"),
+                mk("SkyrimTogetherServer-1.8.4-linux-amd64.tar.gz"),
+                mk("SkyrimTogetherServer-1.8.4-linux-arm64.tar.gz"),
+            ],
+        };
+        let picked = server_zip_asset(&release).unwrap();
+        assert_eq!(picked.name, "SkyrimTogether-1.8.4-windows-x64.zip");
+
+        // A dedicated server zip (if one ships) wins over the client bundle.
+        let with_server_zip = LatestRelease {
+            tag_name: "v1".into(),
+            assets: vec![mk("SkyrimTogether-1-windows-x64.zip"), mk("Server.zip")],
+        };
+        assert_eq!(server_zip_asset(&with_server_zip).unwrap().name, "Server.zip");
+
+        // Nothing usable stays explicit.
+        let tarballs_only = LatestRelease {
+            tag_name: "v1".into(),
+            assets: vec![mk("SkyrimTogetherServer-linux-amd64.tar.gz")],
+        };
+        assert!(server_zip_asset(&tarballs_only).is_none());
     }
 }
