@@ -23,6 +23,8 @@ mod cc_clean;
 mod config;
 #[path = "str-nexus/download.rs"]
 mod download;
+#[path = "str-headless/mod.rs"]
+mod headless;
 #[path = "str-launch/mod.rs"]
 mod launch;
 #[path = "str-log/mod.rs"]
@@ -94,6 +96,11 @@ fn main() -> iced::Result {
     // File log + panic hook come up before anything else; failure is silent
     // (the app still runs, the activity pane still works).
     let _ = logging::init();
+    // Headless CLI: `str-launcher --headless install|launch|server …` runs the
+    // same pipelines without the GUI and exits with 0/1/2.
+    if let Some(code) = headless::maybe_run(std::env::args()) {
+        std::process::exit(code);
+    }
     iced::application(app::boot, app::update, app::view)
         .title(title)
         .theme(dark_theme)
