@@ -53,14 +53,49 @@ drop them in under Settings → Offline mode, and press Install. No key needed.
 
 - **Nothing is deleted without a backup.** Removed Creation Club content goes
   to `str-cc-backup/`, and a manifest in the game folder records every file the
-  launcher touched — **Undo** restores your Skyrim to exactly how it was.
-- **GOG / Epic?** Automatic Steam detection and the Steam launch integrations
-  are Steam-only (the mod itself is built for Steam), but the installer still
-  works: point it at your `SkyrimSE.exe` under Settings → Game → Browse.
-- **Linux:** the launcher pins **GE-Proton 10** automatically (GE-Proton 11
-  crashes Skyrim Together 1.8) and offers two launch modes — replace the
-  Skyrim launcher, or add a separate *"Skyrim Together Reborn"* entry to your
-  Steam library with its own artwork. Both are fully reversible with Undo.
+  launcher touched — **Undo** restores your Skyrim to exactly how it was
+  (including the registry keys and Steam library entry on Windows).
+- **GOG / Epic / Heroic?** On Windows the launcher also finds Skyrim in GOG
+  Galaxy, the Epic Games Launcher, Heroic and common manual install locations;
+  the Steam library entry works there too. Steam detection and the Steam launch
+  integrations remain Steam-only (the mod itself is built for Steam), but the
+  installer still works: point it at your `SkyrimSE.exe` under Settings →
+  Game → Browse.
+- **Linux:** the launcher pins **GE-Proton 10** automatically (GE-Proton 11+
+  crashes Skyrim Together 1.8 — selecting one shows a hard warning) and offers
+  two launch modes — replace the Skyrim launcher, or add a separate
+  *"Skyrim Together Reborn"* entry to your Steam library with its own artwork.
+  Both are fully reversible with Undo. While Steam is running, changing the
+  compatibility tool waits for your explicit **Restart Steam** click instead of
+  force-restarting, and Flatpak Steam installs are handled too.
+- **Server hosting:** the Server tab shows every LAN address with the
+  configured port (one-click copy), validates `STServer.ini` fields, and ships
+  copy-paste firewall commands (Windows Firewall / ufw / firewalld). The
+  server downloads from Nexus first and falls back to the official
+  TiltedPhoques GitHub release without an API key.
+- **A diagnostics log** is written to the launcher's config folder
+  (`launcher.log`, rotated) and records every activity-pane line plus any
+  crash — attach it when reporting problems. The launcher also checks
+  [releases](https://github.com/CyrixJD115/Skyrim-Together-Reborn-Launcher/releases)
+  at startup and shows a banner when a newer version exists; it never updates
+  itself.
+- **File integrity:** installed STR files are verified against a
+  signed-off manifest of known-good hashes (`version-manifest.json`); the
+  readiness checklist flags mismatches.
+
+## Command line (headless)
+
+The same pipelines run without the GUI — handy for scripts and CI:
+
+```bash
+str-launcher --headless install --game-dir "/path/Skyrim Special Edition"   --offline-str str.zip --offline-al addresslibrary.zip
+str-launcher --headless launch
+str-launcher --headless server --offline-server server.zip
+str-launcher --headless --help   # all options
+```
+
+Exit codes: 0 success, 1 pipeline failure, 2 bad usage. (On Windows the app is
+a GUI binary — run headless mode from a terminal.)
 
 ## Troubleshooting
 

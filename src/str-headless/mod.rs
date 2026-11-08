@@ -101,10 +101,12 @@ pub fn parse_args<I: Iterator<Item = String>>(args: I) -> Result<Args, String> {
 /// headless invocation, start the GUI". Returns the process exit code.
 pub fn maybe_run<I: Iterator<Item = String>>(raw: I) -> Option<i32> {
     let all: Vec<String> = raw.collect();
-    if all.first().map(String::as_str) != Some("--headless") {
+    // all[0] is argv[0] (the program path); the flag must be the first
+    // *argument*.
+    if all.get(1).map(String::as_str) != Some("--headless") {
         return None;
     }
-    let rest = &all[1..];
+    let rest = &all[2..];
     if rest.iter().any(|a| a == "--help" || a == "-h") {
         println!("{USAGE}");
         return Some(0);
@@ -326,6 +328,21 @@ mod tests {
         assert_eq!(args(&["server"]).unwrap().command, Command::Server);
         let server = args(&["server", "--offline-server", "/s.zip"]).unwrap();
         assert_eq!(server.offline_server.as_deref(), Some(std::path::Path::new("/s.zip")));
+    }
+
+    /// argv[0] is the program path: `--headless` must be detected as the
+    /// first argument (regression: the GUI used to launch instead).
+    #[test]
+    fn maybe_run_detects_headless_after_the_program_path() {
+        let program = "/usr/bin/str-launcher".to_string();
+        assert_eq!(
+            maybe_run([program.clone(), "--help".to_string()].into_iter()),
+            None
+        );
+        assert_eq!(
+            maybe_run([program, "--headless".to_string(), "--help".to_string()].into_iter()),
+            Some(0)
+        );
     }
 
     #[test]
