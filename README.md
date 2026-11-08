@@ -64,6 +64,11 @@ drop them in under Settings → Offline mode, and press Install. No key needed.
 
 ## Troubleshooting
 
+- **"Not purely vanilla" warning** — Run Install again with the current launcher.
+  It repairs the active Proton profile’s plugin list and required load order.
+  Keep Creation Club cleanup enabled. The readiness checklist reports remaining
+  extra or inactive plugins; disable additional mods separately. Steam updates
+  or file verification can restore Creation Club files, requiring cleanup again.
 - **"Skyrim Together is not running!"** — Press **Undo**, then **Install** again.
 - **Crash on connect** — All players must run the same STR version (use
   *Check updates*). The launcher already removes bundled Creation Club content;

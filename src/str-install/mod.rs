@@ -92,7 +92,7 @@ async fn run_inner(params: &Params, rep: &Reporter) -> Result<InstallSummary, St
     let str_version_label = str_meta.as_ref().map(mod_version_label).or(extracted_version);
 
     let cc_removed = clean_creation_club(params, rep, &game_dir, &mut warnings).await;
-    enable_plugins(params, rep, &data_dir).await;
+    enable_plugins(params, rep, &data_dir).await?;
     configure_platform(params, rep, &mut warnings).await?;
 
     // ---------- Persist manifest + config summary ----------
@@ -431,51 +431,35 @@ async fn clean_creation_club(
 // Step 7: Plugins.txt
 // ---------------------------------------------------------------------------
 
-/// Enable the SkyrimTogether esps (plus `_ResourcePack.esl`, which no STR esp
-/// masters) in every existing Plugins.txt location, and create a canonical
-/// one when none exists — a fresh Proton prefix has no Plugins.txt until the
-/// game's first run, and without entries STR's client rejects the install
-/// with its "not purely vanilla" dialog.
-///
-/// Older Skyrim Together archives ship no `.esp` plugin at all, so finding
-/// none is normal — not a warning. Anything that does ship one gets enabled.
-async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path) {
-    rep.step("Enabling SkyrimTogether.esp", 7).await;
+/// Always repair the primary profile, even if a legacy list already exists.
+/// Read/write errors must fail installation rather than report false success.
+async fn enable_plugins(params: &Params, rep: &Reporter, data_dir: &Path) -> Result<(), String> {
+    rep.step("Enabling Skyrim Together plugins", 7).await;
     let str_plugins = plugins::find_str_plugins(data_dir);
-    if str_plugins.is_empty() {
-        rep.log(
-            "This Skyrim Together version ships no .esp plugin — no Plugins.txt entry is needed.",
-        )
-        .await;
-    }
     let mut ensure: Vec<String> = plugins::BASE_PLUGINS.iter().map(|p| p.to_string()).collect();
     ensure.extend(str_plugins.iter().cloned());
-    let mut plugin_locations_updated = 0;
-    for profile_dir in crate::plugins::candidate_game_profile_dirs(&params.game_dir) {
-        let plugins_txt = profile_dir.join("Plugins.txt");
-        if plugins_txt.is_file() {
-            let mut text = std::fs::read_to_string(&plugins_txt).unwrap_or_default();
-            plugins::update_plugins_text(&mut text, &ensure);
-            if atomic_write(&plugins_txt, text.as_bytes()).is_ok() {
-                plugin_locations_updated += 1;
-                rep.log(format!("Updated {}", plugins_txt.display())).await;
-            }
-        }
+    let primary = plugins::primary_plugins_txt_path(&params.game_dir)
+        .ok_or("Cannot locate Skyrim's primary Plugins.txt")?;
+    let mut paths: Vec<_> = plugins::candidate_game_profile_dirs(&params.game_dir)
+        .iter().map(|dir| plugins::plugins_path(dir))
+        .filter(|path| path.is_file()).collect();
+    if !paths.contains(&primary) {
+        paths.push(primary);
     }
-    if plugin_locations_updated == 0 {
-        match plugins::primary_plugins_txt_path(&params.game_dir) {
-            Some(plugins_txt) => {
-                if let Some(dir) = plugins_txt.parent() {
-                    let _ = std::fs::create_dir_all(dir);
-                }
-                match atomic_write(&plugins_txt, plugins::canonical_plugins_text(&str_plugins).as_bytes()) {
-                    Ok(()) => rep.log(format!("Created {}", plugins_txt.display())).await,
-                    Err(e) => rep.log(format!("Could not create {}: {e}", plugins_txt.display())).await,
-                }
-            }
-            None => rep.log("No Plugins.txt location found to create one in.").await,
+    for path in paths {
+        let mut text = if path.exists() {
+            std::fs::read_to_string(&path).map_err(|e| format!("Read {}: {e}", path.display()))?
+        } else {
+            plugins::canonical_plugins_text(&str_plugins)
+        };
+        plugins::update_plugins_text(&mut text, &ensure);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
+        atomic_write(&path, text.as_bytes()).map_err(|e| format!("Write {}: {e}", path.display()))?;
+        rep.log(format!("Updated {}", path.display())).await;
     }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -762,6 +746,9 @@ mod tests {
         make_zip(&al_zip, &[("SKSE/Plugins/version-1-6-1170-0.dll", b"all-in-one")]);
 
         let mut params = test_params(&root);
+        let fake_proton = root.join("steam/compatibilitytools.d").join(crate::steam::DEFAULT_PROTON_TOOL);
+        std::fs::create_dir_all(&fake_proton).unwrap();
+        std::fs::write(fake_proton.join("proton"), b"#!/bin/sh\n").unwrap();
         params.offline_str = Some(str_zip);
         params.offline_al = Some(al_zip);
         run_and_wait(params).await.expect("pipeline should succeed");
@@ -778,6 +765,35 @@ mod tests {
         assert_eq!(lines[9], "*SkyrimTogetherQuestPatches.esp");
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[tokio::test]
+    async fn repairs_primary_even_when_legacy_profile_exists() {
+        let root = std::env::temp_dir().join(format!("str-profile-repair-{}", std::process::id()));
+        let params = test_params(&root);
+        let user = root.join("steamapps/compatdata/489830/pfx/drive_c/users/steamuser");
+        let legacy = user.join("Documents/My Games/Skyrim Special Edition");
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("plugins.txt"), "SkyrimTogether.esp\n").unwrap();
+        let data = params.game_dir.join("Data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("SkyrimTogether.esp"), b"esp").unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1024);
+        let rep = Reporter::new(tx);
+        enable_plugins(&params, &rep, &data).await.unwrap();
+        let primary = plugins::primary_plugins_txt_path(&params.game_dir).unwrap();
+        assert!(primary.is_file());
+        assert!(!legacy.join("Plugins.txt").exists());
+        assert!(std::fs::read_to_string(legacy.join("plugins.txt")).unwrap().contains("*SkyrimTogether.esp"));
+        // Wine may have created the primary file with lowercase spelling.
+        let lower = primary.with_file_name("plugins.txt");
+        std::fs::rename(&primary, &lower).unwrap();
+        enable_plugins(&params, &rep, &data).await.unwrap();
+        assert!(!primary.exists());
+        assert!(plugins::validate_plugins_text(&std::fs::read_to_string(lower).unwrap(), &["SkyrimTogether.esp".into()]).is_ok());
+        rx.close();
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     /// Drive a pipeline run to completion, returning the final summary.

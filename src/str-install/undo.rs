@@ -60,7 +60,7 @@ pub(super) async fn undo_inner(params: &Params, rep: &Reporter) -> Result<(), St
     // Remove STR plugins from Plugins.txt files we can find.
     rep.step("Cleaning plugin lists", 2).await;
     for profile_dir in crate::plugins::candidate_game_profile_dirs(&params.game_dir) {
-        let plugins_txt = profile_dir.join("Plugins.txt");
+        let plugins_txt = crate::plugins::plugins_path(&profile_dir);
         if plugins_txt.is_file() {
             if let Ok(text) = std::fs::read_to_string(&plugins_txt) {
                 let cleaned: Vec<&str> = text

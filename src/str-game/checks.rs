@@ -153,51 +153,33 @@ fn address_library_version(name: &str) -> Option<(String, [u64; 4])> {
     Some((parts.iter().map(|p| p.to_string()).collect::<Vec<_>>().join("."), key))
 }
 
-/// Any known Plugins.txt location lists SkyrimTogether.esp?
-///
-/// Skyrim Together 1.8+ ships `SkyrimTogether.esp` and
-/// `SkyrimTogetherQuestPatches.esp`; older archives ship none and inject at
-/// runtime. So a missing entry only matters when a `SkyrimTogether*` plugin
-/// actually exists in the game's Data folder.
+/// Check the primary profile actually read by the game, including activation,
+/// required order, base files and bundled Creation Club content.
 fn check_plugins(game_dir: &Path) -> (bool, String) {
     let str_plugins = crate::plugins::find_str_plugins(&game_dir.join("Data"));
-    let mut locations = Vec::new();
-    let mut enabled = 0usize;
-    let mut found_any = false;
-
-    for profile in crate::plugins::candidate_game_profile_dirs(game_dir) {
-        let plugins_txt = profile.join("Plugins.txt");
-        if !plugins_txt.is_file() {
-            continue;
-        }
-        found_any = true;
-        locations.push(plugins_txt.display().to_string());
-        if let Ok(text) = std::fs::read_to_string(&plugins_txt) {
-            if text
-                .lines()
-                .any(|l| l.trim_start_matches('*').trim().to_lowercase().starts_with("skyrimtogether"))
-            {
-                enabled += 1;
-            }
-        }
-    }
-
     if str_plugins.is_empty() {
-        (
-            true,
-            "this Skyrim Together version ships no .esp plugin — no Plugins.txt entry needed"
-                .to_string(),
-        )
-    } else if !found_any {
-        (
-            false,
-            "no Plugins.txt yet — press Install to create one".to_string(),
-        )
-    } else if enabled > 0 {
-        (true, format!("SkyrimTogether.esp enabled in {enabled} location(s)"))
-    } else {
-        (false, format!("SkyrimTogether.esp missing in {} — press Install", locations.join(", ")))
+        // Older STR archives inject at runtime and contain no ESP files.
+        return (true, "This Skyrim Together version ships no plugins".into());
     }
+    let Some(path) = crate::plugins::primary_plugins_txt_path(game_dir) else {
+        return (false, "Cannot locate the active Skyrim profile".into());
+    };
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) => return (false, format!("{}: {e} — press Install", path.display())),
+    };
+    if let Err(detail) = crate::plugins::validate_plugins_text(&text, &str_plugins) {
+        return (false, detail);
+    }
+    for plugin in crate::plugins::BASE_PLUGINS {
+        if !game_dir.join("Data").join(plugin).is_file() {
+            return (false, format!("Data/{plugin} missing — restore the base game files"));
+        }
+    }
+    if crate::cc_clean::cc_present(game_dir) {
+        return (false, "Bundled Creation Club content remains — enable cleanup and press Install".into());
+    }
+    (true, format!("Recommended plugins enabled in {}", path.display()))
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
