@@ -165,6 +165,10 @@ impl App {
                         ));
                     }
                     PipeEvent::Log(line) => self.push_log(line),
+            #[cfg(all(unix, not(target_os = "macos")))]
+            PipeEvent::NeedsSteamRestart { steam_root, tool } => {
+                self.pending_steam = Some((steam_root, tool));
+            }
                     PipeEvent::Done(result) => {
                         let was_server_get = self.phase == Phase::GettingServer;
                         match &result {
@@ -316,6 +320,47 @@ impl App {
                 Task::none()
             }
 
+            Message::RestartSteamForCompatTool => {
+                #[cfg(all(unix, not(target_os = "macos")))]
+                if let Some((steam_root, tool)) = self.pending_steam.clone() {
+                    self.pending_steam = None;
+                    self.push_log("Shutting Steam down to apply the compatibility tool…");
+                    return Task::perform(
+                        async move {
+                            tokio::task::spawn_blocking(move || {
+                                crate::proton::apply_with_steam_restart(
+                                    &steam_root,
+                                    crate::steam::SKYRIM_APPID,
+                                    &tool,
+                                )
+                            })
+                            .await
+                            .map_err(|e| e.to_string())?
+                        },
+                        Message::SteamCompatApplied,
+                    );
+                }
+                Task::none()
+            }
+            Message::SteamCompatApplied(result) => {
+                match result {
+                    Ok(changed) => {
+                        self.banner = Some(Banner::Info(if changed {
+                            "Compatibility tool applied — Steam restarted. You can launch Skyrim                              Together now."
+                                .into()
+                        } else {
+                            "Compatibility tool was already selected — Steam restarted.".into()
+                        }));
+                    }
+                    Err(e) => self.banner = Some(Banner::Error(e)),
+                }
+                Task::none()
+            }
+            Message::DismissSteamRestart => {
+                self.pending_steam = None;
+                Task::none()
+            }
+
             Message::UpdatesChecked(result) => {
                 self.checking = false;
                 match result {
@@ -380,6 +425,12 @@ impl App {
                 Task::none()
             }
             Message::ProtonPicked(name) => {
+                #[cfg(all(unix, not(target_os = "macos")))]
+                if crate::proton::is_wine11_family(&name) {
+                    self.push_log(format!(
+                        "⚠ {name} crashes Skyrim Together 1.8 (Wine 11) — pick a GE-Proton10 build instead."
+                    ));
+                }
                 self.proton_selected = Some(name.clone());
                 self.cfg.active_mut().proton_tool = Some(name);
                 self.save_cfg();

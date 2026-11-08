@@ -58,6 +58,9 @@ pub enum Message {
     UpdatesChecked(Result<Option<String>, String>),
     SelfUpdateChecked(Result<Option<String>, String>),
     DismissUpdateBanner,
+    RestartSteamForCompatTool,
+    SteamCompatApplied(Result<bool, String>),
+    DismissSteamRestart,
     ApiKeyChanged(String),
     GamePathChanged(String),
     GamePathSubmitted,
@@ -172,6 +175,10 @@ pub struct App {
     /// Version of a newer published launcher release (None = up to date or
     /// the check failed/has not run). Rendered as its own non-blocking banner.
     pub(crate) launcher_update: Option<String>,
+    /// Deferred compatibility-tool change (Linux): Steam was running during
+    /// install, so the change waits for an explicit "Restart Steam" click.
+    #[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
+    pub(crate) pending_steam: Option<(PathBuf, String)>,
     pub(crate) checks: Vec<crate::checks::Check>,
     /// Launch-readiness checklist expanded? Collapsed by default — the
     /// header row shows the summary either way.
@@ -208,6 +215,7 @@ impl App {
             server_inputs: Default::default(),
             checking: false,
             launcher_update: None,
+            pending_steam: None,
             checks: Vec::new(),
             show_checks: false,
         };

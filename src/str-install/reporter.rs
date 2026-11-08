@@ -16,6 +16,10 @@ pub enum Event {
     /// Sub-operation progress.
     Progress { label: String, done: u64, total: u64 },
     Log(String),
+    /// Steam is running, so the compatibility-tool change was deferred — the
+    /// UI must confirm with a "Restart Steam" button (Linux).
+    #[cfg(all(unix, not(target_os = "macos")))]
+    NeedsSteamRestart { steam_root: std::path::PathBuf, tool: String },
     Done(Result<InstallSummary, String>),
 }
 

@@ -103,24 +103,31 @@ async fn apply_proton_tool(
         Err(e) => warnings.push(format!("Proton setup failed: {e}")),
     }
 
-    // 2. Select it for Skyrim in Steam.
+    // 2. Select it for Skyrim in Steam. Steam is never force-restarted: while
+    //    the client runs, the change is deferred and the UI shows a
+    //    "Restart Steam" confirmation (see Message::RestartSteamForCompatTool).
     let interactive = std::env::var("STR_LAUNCHER_TEST_MODE").is_err();
     let needs_change = crate::proton::current_compat_tool(root, SKYRIM_APPID)
         .as_deref()
         != Some(params.proton_tool.as_str());
-    if needs_change && interactive {
+    if needs_change && !interactive {
+        rep.log("Test mode: skipping Steam compatibility-tool selection.".to_string()).await;
+    } else if needs_change && plat::is_steam_running() {
+        rep.log(format!(
+            "Steam is running — the {} selection needs Steam to restart. \
+             Press RESTART STEAM in the banner when you're ready.",
+            params.proton_tool
+        ))
+        .await;
+        let _ = rep
+            .sender()
+            .send(super::Event::NeedsSteamRestart {
+                steam_root: root.to_path_buf(),
+                tool: params.proton_tool.clone(),
+            })
+            .await;
+    } else if needs_change {
         rep.log(format!("Selecting {} for Skyrim in Steam...", params.proton_tool)).await;
-        let was_running = plat::is_steam_running();
-        if was_running {
-            rep.log("Restarting Steam so the compatibility tool can be applied...").await;
-            let _ = std::process::Command::new("steam").arg("-shutdown").spawn();
-            for _ in 0..30 {
-                if !plat::is_steam_running() {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            }
-        }
         match crate::proton::select_compat_tool(root, SKYRIM_APPID, &params.proton_tool) {
             Ok(_) => {
                 rep.log(format!("Selected {} for Skyrim.", params.proton_tool)).await;
@@ -131,12 +138,6 @@ async fn apply_proton_tool(
                 params.proton_tool
             )),
         }
-        if was_running {
-            let _ = std::process::Command::new("steam").spawn();
-            rep.log("Steam restarted.").await;
-        }
-    } else if needs_change {
-        rep.log("Test mode: skipping Steam compatibility-tool selection.".to_string()).await;
     } else {
         rep.log(format!("Steam already uses {} for Skyrim.", params.proton_tool)).await;
     }

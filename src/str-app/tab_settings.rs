@@ -2,6 +2,8 @@
 //! offline archives and profiles.
 
 use iced::widget::{checkbox, column, pick_list, row, text_input};
+#[cfg(all(unix, not(target_os = "macos")))]
+use iced::widget::text;
 use iced::{Element, Length};
 
 use super::widgets::{card, danger_btn, link_btn, muted, ornament, secondary_btn, section_title, LINK_APIKEY};
@@ -75,6 +77,20 @@ pub fn settings_tab(app: &App) -> Element<'_, Message> {
             .width(Length::Fill)
             .style(ui::pick_list_style),
         );
+        // Hard warning when a Wine-11 family is selected (STR 1.8 closes
+        // instantly on it).
+        if let Some(tool) = &app.proton_selected {
+            if crate::proton::is_wine11_family(tool) {
+                game = game.push(
+                    text(format!(
+                        "⚠ {tool} crashes Skyrim Together 1.8 right after launch (Wine 11). \
+                         Pick a GE-Proton10 build — press Install to get it automatically."
+                    ))
+                    .size(12)
+                    .color(crate::ui::DANGER_BRIGHT),
+                );
+            }
+        }
     }
 
     game = game.push(ornament());

@@ -37,12 +37,16 @@ const TABS: [(Tab, &str); 3] = [
 pub fn view(app: &App) -> Element<'_, Message> {
     let mut root = column![header(app)].spacing(0);
 
-    let any_banner = banner(app).is_some() || update_banner(app).is_some();
+    let any_banner =
+        banner(app).is_some() || update_banner(app).is_some() || steam_restart_banner(app).is_some();
     let mut banners = column![].spacing(8);
     if let Some(b) = banner(app) {
         banners = banners.push(b);
     }
     if let Some(b) = update_banner(app) {
+        banners = banners.push(b);
+    }
+    if let Some(b) = steam_restart_banner(app) {
         banners = banners.push(b);
     }
     if any_banner {
@@ -317,6 +321,45 @@ fn update_banner(app: &App) -> Option<Element<'_, Message>> {
             })
             .into(),
     )
+}
+
+/// "Steam is running — restart to apply the compatibility tool?" card with
+/// the explicit confirmation button (replaces force-restarting Steam).
+#[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(unused_variables))]
+fn steam_restart_banner(app: &App) -> Option<Element<'_, Message>> {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if let Some((_, tool)) = &app.pending_steam {
+        let line = row![
+            text("◆").size(11).color(ui::GOLD_BRIGHT),
+            text(format!(
+                "Steam is running. Restart it now to select {tool} for Skyrim?"
+            ))
+            .size(13)
+            .width(Length::Fill)
+            .wrapping(iced::widget::text::Wrapping::Word),
+            secondary_btn("RESTART STEAM", Message::RestartSteamForCompatTool),
+            button(text("✕").size(11))
+                .padding([3, 8])
+                .style(ui::secondary_button())
+                .on_press(Message::DismissSteamRestart),
+        ]
+        .spacing(10)
+        .align_y(iced::Alignment::Center);
+
+        return Some(
+            container(line)
+                .padding([10, 14])
+                .width(Length::Fill)
+                .style(|theme| {
+                    let mut s = ui::card(theme);
+                    s.border.color = ui::GOLD;
+                    s.border.width = 1.0;
+                    s
+                })
+                .into(),
+        );
+    }
+    None
 }
 
 fn banner(app: &App) -> Option<Element<'_, Message>> {

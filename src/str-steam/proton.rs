@@ -137,6 +137,38 @@ pub fn select_compat_tool(steam_root: &Path, appid: &str, tool: &str) -> Result<
     Ok(true)
 }
 
+/// Shut Steam down cleanly, select the tool, and restart Steam if it was
+/// running. Backs the "Restart Steam" confirmation flow: the install pipeline
+/// defers the change while Steam runs, and the UI applies it here on demand.
+pub fn apply_with_steam_restart(steam_root: &Path, appid: &str, tool: &str) -> Result<bool, String> {
+    use crate::platform::native as plat;
+    let was_running = plat::is_steam_running();
+    if was_running {
+        plat::shutdown_steam();
+        for _ in 0..30 {
+            if !plat::is_steam_running() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
+    let changed = select_compat_tool(steam_root, appid, tool)?;
+    if was_running {
+        plat::launch_steam();
+    }
+    Ok(changed)
+}
+
+/// Is the named compatibility tool from a Wine-11 family that crashes STR 1.8
+/// (GE-Proton 11+, official Proton 11 / Experimental)?
+pub fn is_wine11_family(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    if lower.contains("proton 11") || lower.contains("proton - experimental") {
+        return true;
+    }
+    lower.starts_with("ge-proton") && numeric_version(name).0 >= 11
+}
+
 pub fn current_compat_tool(steam_root: &Path, appid: &str) -> Option<String> {
     let text = std::fs::read_to_string(steam_root.join("config/config.vdf")).ok()?;
     vdf::get_compat_tool(&text, appid)
@@ -150,5 +182,18 @@ mod tests {
     fn version_sort() {
         assert!(numeric_version("GE-Proton10-34") > numeric_version("GE-Proton9-20"));
         assert_eq!(numeric_version("GE-Proton10-34"), (10, 34));
+    }
+
+    #[test]
+    fn wine11_families_are_flagged() {
+        assert!(is_wine11_family("GE-Proton11-1"));
+        assert!(is_wine11_family("GE-Proton12-4"));
+        assert!(is_wine11_family("Proton - Experimental"));
+        assert!(is_wine11_family("Proton 11.0 (Beta)"));
+        // The tested families stay clean.
+        assert!(!is_wine11_family("GE-Proton10-34"));
+        assert!(!is_wine11_family("GE-Proton9-20"));
+        assert!(!is_wine11_family("Proton 10.0"));
+        assert!(!is_wine11_family("Proton - Hotfix"));
     }
 }
