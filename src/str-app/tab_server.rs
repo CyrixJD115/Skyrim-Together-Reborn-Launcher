@@ -5,6 +5,7 @@ use iced::widget::{column, row, space, text, text_input};
 use iced::{Element, Length};
 
 use super::widgets::{card, go_btn, muted, ornament, secondary_btn, section_title};
+use crate::ui as ui_colors;
 use super::view::{offline_row, progress_block};
 use super::{App, Message, OpenTarget, Phase, ServerField};
 use crate::server::INI_HINT;
@@ -48,10 +49,109 @@ pub fn server_tab(app: &App) -> Element<'_, Message> {
     page = page.push(card(head));
 
     if app.server_installed {
+        page = page.push(connect_info_card(app));
         page = page.push(server_settings_card(app));
+        page = page.push(firewall_card(app));
     }
 
     page.into()
+}
+
+/// "Give your friends this address" card: every LAN IP with the configured
+/// port (the in-editor value wins so the card matches what you're saving).
+fn connect_info_card(app: &App) -> Element<'_, Message> {
+    let port = {
+        let parsed = app.server_inputs[0].trim().parse::<u16>().ok();
+        parsed.or_else(|| {
+            app.server_ini
+                .as_ref()
+                .and_then(|(_, settings)| settings.port.as_ref())
+                .and_then(|p| p.trim().parse::<u16>().ok())
+        })
+        .unwrap_or(7777)
+    };
+
+    let mut col = column![].spacing(8);
+    col = col.push(section_title("Connect info"));
+    if app.lan_ips.is_empty() {
+        col = col.push(muted(
+            "No LAN addresses could be detected — players join via your public IP with port forwarding.",
+        ));
+    } else {
+        for ip in &app.lan_ips {
+            let address = format!("{ip}:{port}");
+            col = col.push(
+                row![
+                    text("▸").size(11).color(ui_colors::GOLD),
+                    text(address.clone())
+                        .size(14)
+                        .font(FONT_CINZEL_BOLD)
+                        .color(ui_colors::TEXT),
+                    space::horizontal(),
+                    secondary_btn("COPY", Message::CopyText(address)),
+                ]
+                .spacing(10)
+                .align_y(iced::Alignment::Center)
+                .width(Length::Fill),
+            );
+        }
+    }
+    col = col.push(muted(
+        "Players press F2 → Connect and enter an address. The port must be open (UDP) — see the firewall notes below.",
+    ));
+    card(col)
+}
+
+/// One-click firewall helper notes for the currently configured port.
+fn firewall_card(app: &App) -> Element<'_, Message> {
+    let port = app
+        .server_inputs[0]
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .or_else(|| {
+            app.server_ini
+                .as_ref()
+                .and_then(|(_, settings)| settings.port.as_ref())
+                .and_then(|p| p.trim().parse::<u16>().ok())
+        })
+        .unwrap_or(7777);
+
+    let mut col = column![].spacing(8);
+    col = col.push(
+        row![
+            section_title("Firewall"),
+            space::horizontal(),
+            secondary_btn(
+                if app.show_firewall { "HIDE COMMANDS" } else { "SHOW COMMANDS" },
+                Message::ToggleFirewallNotes,
+            ),
+        ]
+        .align_y(iced::Alignment::Center),
+    );
+    col = col.push(muted(format!(
+        "The server listens on UDP port {port}. Open it with the command for your setup:"
+    )));
+    if app.show_firewall {
+        for (label, command) in crate::server::firewall_commands(port) {
+            col = col.push(
+                row![
+                    text(label.to_string()).size(12).color(ui_colors::MUTED),
+                    space::horizontal(),
+                    secondary_btn("COPY", Message::CopyText(command.clone())),
+                ]
+                .spacing(10)
+                .align_y(iced::Alignment::Center),
+            );
+            col = col.push(
+                text(command)
+                    .size(12)
+                    .color(ui_colors::TEXT)
+                    .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+            );
+        }
+    }
+    card(col)
 }
 
 fn installed_chip(installed: bool) -> Element<'static, Message> {
@@ -112,10 +212,27 @@ fn server_settings_card(app: &App) -> Element<'_, Message> {
                 ServerField::ModCheck,
                 false,
             ));
+            let problems = crate::server::validate_server_inputs(
+                &app.server_inputs[0],
+                &app.server_inputs[2],
+                &app.server_inputs[3],
+            );
+            for problem in &problems {
+                col = col.push(
+                    text(problem.clone())
+                        .size(12)
+                        .color(ui_colors::DANGER_BRIGHT),
+                );
+            }
+            let password = &app.server_inputs[2];
+            if password.is_empty() {
+                col = col.push(muted("No password — anyone can join (set one for public servers)."));
+            }
             col = col.push(ornament());
             col = col.push(
                 row![
-                    go_btn("SAVE SETTINGS", Message::ServerSaveConfig),
+                    go_btn("SAVE SETTINGS", Message::ServerSaveConfig)
+                        .on_press_maybe(problems.is_empty().then_some(Message::ServerSaveConfig)),
                     secondary_row_buttons(app),
                 ]
                 .spacing(8)

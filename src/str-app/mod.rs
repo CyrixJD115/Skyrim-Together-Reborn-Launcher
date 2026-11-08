@@ -61,6 +61,8 @@ pub enum Message {
     RestartSteamForCompatTool,
     SteamCompatApplied(Result<bool, String>),
     DismissSteamRestart,
+    ToggleFirewallNotes,
+    CopyText(String),
     ApiKeyChanged(String),
     GamePathChanged(String),
     GamePathSubmitted,
@@ -125,6 +127,7 @@ pub struct LoadResult {
     pub cfg: Config,
     pub installs: Vec<GameInstall>,
     pub proton_names: Vec<String>,
+    pub lan_ips: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +182,11 @@ pub struct App {
     /// install, so the change waits for an explicit "Restart Steam" click.
     #[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
     pub(crate) pending_steam: Option<(PathBuf, String)>,
+    /// This machine's LAN IPv4 addresses (computed once at startup), shown by
+    /// the Server tab so hosts know what to give their friends.
+    pub(crate) lan_ips: Vec<String>,
+    /// Firewall helper notes expanded? (Server tab.)
+    pub(crate) show_firewall: bool,
     pub(crate) checks: Vec<crate::checks::Check>,
     /// Launch-readiness checklist expanded? Collapsed by default — the
     /// header row shows the summary either way.
@@ -216,6 +224,8 @@ impl App {
             checking: false,
             launcher_update: None,
             pending_steam: None,
+            lan_ips: Vec::new(),
+            show_firewall: false,
             checks: Vec::new(),
             show_checks: false,
         };
@@ -406,7 +416,11 @@ async fn load() -> LoadResult {
         .into_iter()
         .map(|t| t.name)
         .collect();
-    LoadResult { dirs, cfg, installs, proton_names }
+    // Interface enumeration shells out; keep it off the UI thread.
+    let lan_ips = tokio::task::spawn_blocking(crate::server::lan_ips)
+        .await
+        .unwrap_or_default();
+    LoadResult { dirs, cfg, installs, proton_names, lan_ips }
 }
 
 /// Spawn a job that reports through the pipeline channel and surface its

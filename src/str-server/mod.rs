@@ -248,6 +248,148 @@ pub fn write_setting(path: &Path, key: &str, value: &str) -> Result<(), String> 
     crate::paths::atomic_write(path, out.as_bytes())
 }
 
+// ---------------------------------------------------------------------------
+// Server tab QoL: LAN addresses, INI validation and firewall helper notes
+// ---------------------------------------------------------------------------
+
+/// The machine's primary outbound IPv4 (UDP "connect" trick: no packet is
+/// sent, the OS just routes).
+pub fn primary_ip() -> Option<String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let addr = socket.local_addr().ok()?;
+    addr.is_ipv4().then(|| addr.ip().to_string())
+}
+
+/// All LAN IPv4 addresses, primary first. Best effort: an empty result just
+/// means we could not enumerate interfaces.
+pub fn lan_ips() -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(primary) = primary_ip() {
+        out.push(primary);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("ipconfig").output();
+        if let Ok(o) = output {
+            for ip in parse_ipconfig_output(&String::from_utf8_lossy(&o.stdout)) {
+                if !out.contains(&ip) {
+                    out.push(ip);
+                }
+            }
+        }
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let output = std::process::Command::new("ip")
+            .args(["-4", "-o", "addr", "show"])
+            .output();
+        if let Ok(o) = output {
+            for ip in parse_ip_addr_output(&String::from_utf8_lossy(&o.stdout)) {
+                if !out.contains(&ip) {
+                    out.push(ip);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn is_public_lan_ip(ip: &str) -> bool {
+    !ip.starts_with("127.")
+        && !ip.starts_with("169.254.")
+        && !ip.starts_with("0.")
+}
+
+/// Parse `ip -4 -o addr show` lines into bare IPv4 addresses.
+/// (`2: eth0    inet 192.168.1.10/24 brd ... scope global ...`)
+#[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
+pub fn parse_ip_addr_output(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let mut parts = line.split_whitespace();
+        while let Some(token) = parts.next() {
+            if token == "inet" {
+                if let Some(addr) = parts.next() {
+                    let ip = addr.split('/').next().unwrap_or(addr);
+                    if is_public_lan_ip(ip) && !out.iter().any(|existing| existing == ip) {
+                        out.push(ip.to_string());
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Parse `ipconfig` output into bare IPv4 addresses.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn parse_ipconfig_output(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        if !line.contains("IPv4") {
+            continue;
+        }
+        if let Some((_, addr)) = line.rsplit_once(':') {
+            let ip = addr.trim().trim_end_matches('(').trim_end_matches(')').trim();
+            let is_ipv4 = !ip.is_empty()
+                && ip.parse::<std::net::Ipv4Addr>().is_ok()
+                && is_public_lan_ip(ip);
+            if is_ipv4 && !out.iter().any(|existing| existing == ip) {
+                out.push(ip.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Validate the STServer.ini fields the editor manages. Empty port/max mean
+/// "leave unchanged" and are fine; anything present must parse.
+pub fn validate_server_inputs(port: &str, password: &str, max_players: &str) -> Vec<String> {
+    let mut problems = Vec::new();
+    if !port.is_empty() {
+        match port.parse::<u16>() {
+            Ok(0) => problems.push("Port must be 1–65535 (0 is invalid).".into()),
+            Ok(_) => {}
+            Err(_) => problems.push(format!("Port \"{port}\" is not a number between 1 and 65535.")),
+        }
+    }
+    if password.chars().any(|c| c.is_whitespace() || c == '"' || c == '=') {
+        problems.push("Password should not contain whitespace, quotes or '='.".into());
+    }
+    if !max_players.is_empty() {
+        match max_players.parse::<u16>() {
+            Ok(n @ 1..=255) => {
+                let _ = n;
+            }
+            Ok(_) => problems.push("Max players must be between 1 and 255.".into()),
+            Err(_) => problems.push(format!("Max players \"{max_players}\" is not a number.")),
+        }
+    }
+    problems
+}
+
+/// One-click firewall helper notes for the chosen port: the exact commands a
+/// host needs to let UDP traffic through.
+pub fn firewall_commands(port: u16) -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "Windows Firewall (admin cmd)",
+            format!(
+                "netsh advfirewall firewall add rule name=\"Skyrim Together Server\" dir=in \
+                 action=allow protocol=UDP localport={port}"
+            ),
+        ),
+        ("ufw (Linux)", format!("sudo ufw allow {port}/udp")),
+        (
+            "firewalld (Linux)",
+            format!(
+                "sudo firewall-cmd --permanent --add-port={port}/udp && sudo firewall-cmd --reload"
+            ),
+        ),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,5 +441,53 @@ mod tests {
         }
         assert!(saw_offline);
         let _ = std::fs::remove_dir_all(&root);
+    
+        let text = "2: eth0    inet 192.168.1.10/24 brd 192.168.1.255 scope global dynamic eth0\\       valid_lft 85261sec preferred_lft 85261sec\n\
+                    3: wg0    inet 10.66.66.2/32 scope global wg0\n\
+                    1: lo    inet 127.0.0.1/8 scope host lo\n\
+                    5: wlan0    inet 169.254.9.9/16 brd 169.254.255.255 scope link dynamic";
+        let ips = parse_ip_addr_output(text);
+        assert_eq!(ips, vec!["192.168.1.10", "10.66.66.2"]);
     }
+
+    #[test]
+    fn parses_ipconfig_output() {
+        let text = "\
+Ethernet adapter Ethernet:\n\
+\n\
+   Connection-specific DNS Suffix  . : lan\n\
+   IPv4 Address. . . . . . . . . . . : 192.168.1.42\n\
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0\n\
+   Autoconfiguration IPv4 Address. . : 169.254.1.1\n";
+        let ips = parse_ipconfig_output(text);
+        assert_eq!(ips, vec!["192.168.1.42"]);
+    }
+
+    #[test]
+    fn server_input_validation_covers_port_password_players() {
+        // Everything empty: no problems (fields left unchanged).
+        assert!(validate_server_inputs("", "", "").is_empty());
+        // Valid set.
+        assert!(validate_server_inputs("7777", "secret", "8").is_empty());
+        // Port problems.
+        assert!(validate_server_inputs("0", "", "").iter().any(|p| p.contains("0 is invalid")));
+        assert!(validate_server_inputs("99999", "", "").iter().any(|p| p.contains("not a number")));
+        assert!(validate_server_inputs("abc", "", "").iter().any(|p| p.contains("not a number")));
+        // Password problems.
+        assert!(validate_server_inputs("7777", "my pass", "").iter().any(|p| p.contains("Password")));
+        assert!(validate_server_inputs("7777", "a\"b", "").iter().any(|p| p.contains("Password")));
+        // Max players problems.
+        assert!(validate_server_inputs("7777", "", "300").iter().any(|p| p.contains("255")));
+        assert!(validate_server_inputs("7777", "", "lots").iter().any(|p| p.contains("number")));
+    }
+
+    #[test]
+    fn firewall_commands_cover_all_three_toolchains() {
+        let cmds = firewall_commands(7777);
+        assert_eq!(cmds.len(), 3);
+        assert!(cmds[0].1.contains("localport=7777"));
+        assert!(cmds[1].1.contains("7777/udp"));
+        assert!(cmds[2].1.contains("7777/udp"));
 }
+}
+

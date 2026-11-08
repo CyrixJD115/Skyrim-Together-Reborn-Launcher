@@ -37,8 +37,9 @@ impl App {
             Message::Noop => Task::none(),
 
             Message::Loaded(result) => {
-                let super::LoadResult { dirs, cfg, installs, proton_names } = *result;
+                let super::LoadResult { dirs, cfg, installs, proton_names, lan_ips } = *result;
                 self.proton_names = proton_names;
+                self.lan_ips = lan_ips;
                 self.proton_selected = self
                     .proton_names
                     .iter()
@@ -361,6 +362,15 @@ impl App {
                 Task::none()
             }
 
+            Message::ToggleFirewallNotes => {
+                self.show_firewall = !self.show_firewall;
+                Task::none()
+            }
+            Message::CopyText(text) => {
+                self.push_log(format!("Copied to clipboard: {text}"));
+                iced::clipboard::write::<Message>(text)
+            }
+
             Message::UpdatesChecked(result) => {
                 self.checking = false;
                 match result {
@@ -661,6 +671,19 @@ impl App {
                     self.banner = Some(Banner::Error(format!("No STServer.ini found.\n{INI_HINT}")));
                     return Task::none();
                 };
+                let port_input = self.server_inputs[0].trim().to_string();
+                let problems = crate::server::validate_server_inputs(
+                    &port_input,
+                    &self.server_inputs[2],
+                    &self.server_inputs[3],
+                );
+                if !problems.is_empty() {
+                    self.banner = Some(Banner::Error(format!(
+                        "The server settings have problems:\n{}",
+                        problems.join("\n")
+                    )));
+                    return Task::none();
+                }
                 let port = self.server_inputs[0].trim().to_string();
                 let name = self.server_inputs[1].trim().to_string();
                 let password = self.server_inputs[2].trim().to_string();
