@@ -212,11 +212,8 @@ pub fn entry_order(entry: &[u8]) -> &str {
 
 pub fn entry_int(entry: &[u8], key: &str) -> Option<u32> {
     let bytes = field_bytes(entry, key)?;
-    if bytes.len() == 4 {
-        Some(u32::from_le_bytes(bytes.try_into().unwrap()))
-    } else {
-        None
-    }
+    let word: [u8; 4] = bytes.try_into().ok()?;
+    Some(u32::from_le_bytes(word))
 }
 
 /// Does this entry look like the one we manage? Identity is the

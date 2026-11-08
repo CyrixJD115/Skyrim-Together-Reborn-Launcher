@@ -107,27 +107,55 @@ impl Default for Config {
     }
 }
 
+/// Returned by [`Config::active`] only when the profile invariant is broken;
+/// `normalize` makes this unreachable in practice, but the UI must never panic.
+static FALLBACK_PROFILE: Profile = Profile {
+    name: String::new(),
+    game_dir: None,
+    steam_root: None,
+    proton_tool: None,
+    installed_str_version: None,
+    installed_str_file_id: None,
+    installed_al_version: None,
+    installed_al_file_id: None,
+};
+
 impl Config {
     pub fn active(&self) -> &Profile {
         self.profiles
             .get(self.active_profile)
-            .unwrap_or_else(|| self.profiles.first().expect("always at least one profile"))
+            .or_else(|| self.profiles.first())
+            .unwrap_or(&FALLBACK_PROFILE)
     }
 
     pub fn active_mut(&mut self) -> &mut Profile {
+        self.normalize();
         let idx = self
             .active_profile
             .min(self.profiles.len().saturating_sub(1));
         &mut self.profiles[idx]
     }
 
+    /// Guarantee the invariants the UI relies on: at least one profile and an
+    /// in-range active index (a hand-edited config.json may break both).
+    pub fn normalize(&mut self) {
+        if self.profiles.is_empty() {
+            self.profiles.push(Profile { name: "Default".into(), ..Profile::default() });
+        }
+        self.active_profile = self.active_profile.min(self.profiles.len() - 1);
+    }
+
     pub fn load(dirs: &AppDirs) -> Config {
         let path = dirs.config.join(CONFIG_FILE);
         match std::fs::read_to_string(&path) {
-            Ok(text) => match serde_json::from_str(&text) {
-                Ok(cfg) => cfg,
+            Ok(text) => match serde_json::from_str::<Config>(&text) {
+                Ok(mut cfg) => {
+                    cfg.normalize();
+                    cfg
+                }
                 Err(e) => {
                     eprintln!("config.json is invalid ({e}); starting with defaults");
+                    tracing::warn!(%e, "config.json is invalid; starting with defaults");
                     Config::default()
                 }
             },
@@ -187,5 +215,19 @@ mod tests {
         let back: Config = serde_json::from_str(&text).unwrap();
         assert!(back.clean_cc);
         assert_eq!(back.profiles.len(), 1);
+    }
+
+    /// A hand-edited config with no profiles (or an out-of-range index) must
+    /// normalize instead of panicking on the first UI access.
+    #[test]
+    fn empty_profiles_and_out_of_range_index_normalize() {
+        let mut cfg: Config = serde_json::from_str(r#"{"profiles": [], "active_profile": 5}"#).unwrap();
+        assert_eq!(cfg.profiles.len(), 0);
+        cfg.normalize();
+        assert_eq!(cfg.profiles.len(), 1);
+        assert_eq!(cfg.active_profile, 0);
+        assert_eq!(cfg.active().name, "Default");
+        cfg.active_mut().name = "edited".into();
+        assert_eq!(cfg.profiles[0].name, "edited");
     }
 }

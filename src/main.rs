@@ -25,6 +25,8 @@ mod config;
 mod download;
 #[path = "str-launch/mod.rs"]
 mod launch;
+#[path = "str-log/mod.rs"]
+mod logging;
 #[path = "str-nexus/mod.rs"]
 mod nexus;
 #[path = "str-config/paths.rs"]
@@ -86,6 +88,9 @@ const WINDOW_MAX: iced::Size = iced::Size::new(1020.0, 820.0);
 const WINDOW_MIN: iced::Size = iced::Size::new(880.0, 640.0);
 
 fn main() -> iced::Result {
+    // File log + panic hook come up before anything else; failure is silent
+    // (the app still runs, the activity pane still works).
+    let _ = logging::init();
     iced::application(app::boot, app::update, app::view)
         .title(title)
         .theme(dark_theme)

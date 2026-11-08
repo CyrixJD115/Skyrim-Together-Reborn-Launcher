@@ -61,7 +61,10 @@ impl App {
                         }
                         self.dirs = Some(d);
                     }
-                    Err(e) => self.banner = Some(Banner::Error(e)),
+                    Err(e) => {
+                        tracing::error!("app data directories unavailable: {e}");
+                        self.banner = Some(Banner::Error(e));
+                    }
                 }
                 if self.game_dir.is_none() {
                     if let Some(active) = self.cfg.active().game_dir.clone() {
@@ -71,6 +74,7 @@ impl App {
                         self.steam_root = Some(found.steam_root.clone());
                     }
                 }
+                tracing::info!("startup: {} Skyrim install(s) detected", installs.len());
                 self.installs = installs;
                 if let Some(gd) = &self.game_dir {
                     self.game_path_input = gd.display().to_string();
@@ -163,6 +167,11 @@ impl App {
                     PipeEvent::Log(line) => self.push_log(line),
                     PipeEvent::Done(result) => {
                         let was_server_get = self.phase == Phase::GettingServer;
+                        match &result {
+                            Ok(_) if was_server_get => tracing::info!("server pipeline finished"),
+                            Ok(_) => tracing::info!("install pipeline finished"),
+                            Err(e) => tracing::error!("pipeline failed: {e}"),
+                        }
                         self.phase = Phase::Idle;
                         self.progress = None;
                         match result {
@@ -228,7 +237,10 @@ impl App {
             Message::LaunchResult(result) => {
                 match result {
                     Ok(()) => self.push_log("Skyrim Together launched."),
-                    Err(e) => self.banner = Some(Banner::Error(e)),
+                    Err(e) => {
+                        tracing::error!("launching Skyrim Together failed: {e}");
+                        self.banner = Some(Banner::Error(e));
+                    }
                 }
                 Task::none()
             }
@@ -305,6 +317,7 @@ impl App {
                         self.banner = Some(Banner::Info("No main file found on Nexus.".into()));
                     }
                     Err(e) => {
+                        tracing::warn!("Nexus update check failed: {e}");
                         self.banner = Some(Banner::Error(format!("Update check failed:\n{e}")))
                     }
                 }
@@ -531,7 +544,10 @@ impl App {
             Message::ServerLaunchResult(result) => {
                 match result {
                     Ok(()) => self.push_log("Server launched (log in the data folder)."),
-                    Err(e) => self.banner = Some(Banner::Error(e)),
+                    Err(e) => {
+                        tracing::error!("launching the server failed: {e}");
+                        self.banner = Some(Banner::Error(e));
+                    }
                 }
                 Task::none()
             }
@@ -606,7 +622,10 @@ impl App {
             Message::ServerSaved(result) => {
                 match result {
                     Ok(()) => self.banner = Some(Banner::Info("Server settings saved.".into())),
-                    Err(e) => self.banner = Some(Banner::Error(e)),
+                    Err(e) => {
+                        tracing::error!("saving STServer.ini failed: {e}");
+                        self.banner = Some(Banner::Error(e));
+                    }
                 }
                 Task::none()
             }

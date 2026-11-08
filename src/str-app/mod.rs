@@ -209,7 +209,11 @@ impl App {
     }
 
     pub(crate) fn push_log(&mut self, line: impl Into<String>) {
-        self.log.push_back(line.into());
+        let line = line.into();
+        // The activity pane doubles as the file log: everything the user can
+        // see during a run is also in launcher.log for post-mortems.
+        tracing::info!(target: "activity", "{line}");
+        self.log.push_back(line);
         while self.log.len() > 400 {
             self.log.pop_front();
         }
@@ -316,7 +320,9 @@ impl App {
 
     pub(crate) fn save_cfg(&mut self) {
         if let Some(dirs) = self.dirs.clone() {
-            let _ = self.cfg.save(&dirs);
+            if let Err(e) = self.cfg.save(&dirs) {
+                tracing::error!("saving config.json failed: {e}");
+            }
         }
     }
 
