@@ -51,20 +51,22 @@ pub fn run(input: Input<'_>) -> Vec<Check> {
         return checks;
     };
 
-    // 2. Game build ---------------------------------------------------------
+    // 2. Game build — the minimum runtime comes from the version manifest
+    //    ("1.6.640" for STR 1.8), falling back to the old 1.6+ heuristic.
+    let min_runtime = crate::manifest::embedded()
+        .min_runtime
+        .clone()
+        .unwrap_or_else(|| "1.6.0".into());
     checks.push(match input.game_version {
         Some(v) => {
-            let too_old = v
-                .split('.')
-                .nth(1)
-                .and_then(|m| m.parse::<u64>().ok())
-                .map(|minor| minor < 6)
-                .unwrap_or(false);
+            let too_old = !crate::manifest::runtime_meets_min(v, &min_runtime);
             Check::new(
                 !too_old,
                 "Game build",
                 if too_old {
-                    format!("{v} is too old — STR needs 1.6+; let Steam update the game")
+                    format!(
+                        "{v} is too old — STR needs runtime {min_runtime}+; let Steam update the game"
+                    )
                 } else {
                     format!("SkyrimSE.exe {v}")
                 },
@@ -99,6 +101,9 @@ pub fn run(input: Input<'_>) -> Vec<Check> {
     // 5. Plugins.txt --------------------------------------------------------
     let (plugins_ok, plugins_detail) = check_plugins(dir);
     checks.push(Check::new(plugins_ok, "Plugins.txt", plugins_detail));
+
+    // 6. File integrity -----------------------------------------------------
+    checks.push(check_file_integrity(dir, input.str_version));
 
     // Platform-specific checks ----------------------------------------------
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -151,6 +156,36 @@ fn address_library_version(name: &str) -> Option<(String, [u64; 4])> {
         parts.get(3).copied().unwrap_or(0),
     ];
     Some((parts.iter().map(|p| p.to_string()).collect::<Vec<_>>().join("."), key))
+}
+
+/// Verify the installed Skyrim Together key files against the version
+/// manifest's known-good hashes (quick pass: big archives are size-checked
+/// only). Unknown versions pass with a note — they are unverifiable, not bad.
+fn check_file_integrity(game_dir: &Path, str_version: Option<&str>) -> Check {
+    const LABEL: &str = "File integrity";
+    let Some(label) = str_version else {
+        return Check::new(true, LABEL, "Skyrim Together not installed yet");
+    };
+    let manifest = crate::manifest::embedded();
+    let Some(version) = crate::manifest::lookup_version(&manifest.str, label) else {
+        return Check::new(
+            true,
+            LABEL,
+            format!("no known hashes for Skyrim Together {label} — cannot verify"),
+        );
+    };
+    let problems = crate::manifest::verify_files(version, game_dir, true);
+    if problems.is_empty() {
+        Check::new(true, LABEL, format!("Skyrim Together {label} matches the manifest"))
+    } else {
+        let mut detail = problems
+            .iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        detail.push_str(" — press Install to repair");
+        Check::new(false, LABEL, detail)
+    }
 }
 
 /// Check the primary profile actually read by the game, including activation,
@@ -294,6 +329,25 @@ mod tests {
         assert!(address_library_version("SkyrimTogether.dll").is_none());
         assert!(address_library_version("versionlib-1-6-640-0.bak").is_none());
         assert!(address_library_version("readme.txt").is_none());
+    }
+
+    #[test]
+    fn file_integrity_flags_missing_and_verifies_unknown_versions() {
+        let tmp = std::env::temp_dir().join(format!("str-integrity-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // Unknown version: passes with a note.
+        let check = check_file_integrity(&tmp, Some("9.9.9"));
+        assert!(check.ok);
+
+        // Known version (1.8.4) with no files installed: must fail.
+        let check = check_file_integrity(&tmp, Some("1.8.4"));
+        assert!(!check.ok);
+        assert!(check.detail.contains("missing") || check.detail.contains("wrong size"),
+            "detail: {}", check.detail);
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

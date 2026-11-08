@@ -27,6 +27,8 @@ mod download;
 mod launch;
 #[path = "str-log/mod.rs"]
 mod logging;
+#[path = "str-manifest/mod.rs"]
+mod manifest;
 #[path = "str-nexus/mod.rs"]
 mod nexus;
 #[path = "str-config/paths.rs"]

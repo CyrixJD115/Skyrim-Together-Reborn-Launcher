@@ -24,6 +24,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
 thiserror = "2"
+sha2 = "0.10"
 directories = "6"
 image = { version = "0.25", default-features = false, features = ["png"] }
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }

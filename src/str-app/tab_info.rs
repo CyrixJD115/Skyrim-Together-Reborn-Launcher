@@ -1,6 +1,6 @@
 //! The Info tab: detected setup, resource links and version footer.
 
-use iced::widget::{column, row};
+use iced::widget::{column, row, text};
 use iced::{Element, Length};
 
 use super::widgets::{card, kv, muted, ornament, link_btn, section_title, LINK_NEXUS, LINK_PLAYGUIDE, LINK_WIKI};
@@ -75,6 +75,53 @@ pub fn info_tab(app: &App) -> Element<'_, Message> {
         setup = setup.push(muted(format!("Steam libraries with Skyrim: {list}")));
     }
     page = page.push(card(setup));
+
+    // Game-version compatibility matrix from the version manifest.
+    let matrix = crate::manifest::embedded();
+    if !matrix.game_versions.is_empty() {
+        let mut compat = column![].spacing(6);
+        compat = compat.push(section_title("Compatibility"));
+        compat = compat.push(muted(format!(
+            "Skyrim Together Reborn {} needs an SSE runtime of {} or newer.",
+            matrix
+                .str
+                .versions
+                .keys()
+                .next_back()
+                .map(String::as_str)
+                .unwrap_or("1.8"),
+            matrix.min_runtime.as_deref().unwrap_or("1.6.640"),
+        )));
+        for row_data in &matrix.game_versions {
+            let (color, mark) = if row_data.supported {
+                (crate::ui::SUCCESS_BRIGHT, "✓")
+            } else {
+                (crate::ui::DANGER_BRIGHT, "✕")
+            };
+            let supports = if row_data.str_versions.is_empty() {
+                "no STR version".to_string()
+            } else {
+                format!("STR {}", row_data.str_versions.join(", "))
+            };
+            compat = compat.push(
+                row![
+                    text(mark).size(11).color(color),
+                    text(format!("runtime {}", row_data.runtime))
+                        .size(13)
+                        .color(crate::ui::TEXT),
+                    text(supports).size(12).color(crate::ui::GOLD),
+                    text(row_data.note.clone())
+                        .size(12)
+                        .color(crate::ui::MUTED)
+                        .width(Length::Fill)
+                        .wrapping(iced::widget::text::Wrapping::Word),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center),
+            );
+        }
+        page = page.push(card(compat));
+    }
 
     let mut links = column![].spacing(10);
     links = links.push(section_title("Resources"));

@@ -1,0 +1,60 @@
+{
+  "$comment": "Known-good fingerprints for the files STR Launcher installs. sha256+size pairs were captured from the official Nexus archives; update when a new version ships. 'size' lets the verifier reject corrupted files without hashing, and lets the quick (UI checklist) pass skip huge archives.",
+  "str": {
+    "nexus_mod_id": 69993,
+    "versions": {
+      "1.8.4": {
+        "nexus_file_id": 824269,
+        "files": {
+          "SkyrimTogether.exe": {
+            "sha256": "942730bf771cecfedff938b0a7a2e5e1e8f2bcef0ed76a3ba48da6cddb23465a",
+            "size": 6488064
+          },
+          "Data/_ResourcePack.esl": {
+            "sha256": "3479f3aa9002e28d206a1e7366d613e52d7ba93fc6b96c207a1fcf89051a67db",
+            "size": 78483
+          },
+          "Data/_ResourcePack.bsa": {
+            "sha256": "22527a90587773e35f9e54ffc86a0bb26c7fea523b6254152e121e0ced949619",
+            "size": 916509890
+          }
+        }
+      }
+    }
+  },
+  "address_library": {
+    "nexus_mod_id": 32444,
+    "versions": {
+      "13": {
+        "nexus_file_id": 795954,
+        "files": {
+          "Data/SKSE/Plugins/versionlib-1-6-1170-0.bin": {
+            "sha256": "c4093c569a3c83b26587f4b9ea4c55de9ae6e73b84a2af9fb3fbd30e2fe0d452",
+            "size": 795129
+          }
+        }
+      }
+    }
+  },
+  "game_versions": [
+    {
+      "runtime": "1.6.1170",
+      "str_versions": ["1.8.4"],
+      "supported": true,
+      "note": "Current Steam runtime — the tested baseline."
+    },
+    {
+      "runtime": "1.6.640+",
+      "str_versions": ["1.8.0", "1.8.1", "1.8.2", "1.8.3", "1.8.4"],
+      "supported": true,
+      "note": "Skyrim Together Reborn 1.8 requires SSE runtime 1.6.640 or newer; every 1.6.640+ build works."
+    },
+    {
+      "runtime": "<1.6.640",
+      "str_versions": [],
+      "supported": false,
+      "note": "Too old — let Steam update the game before installing STR."
+    }
+  ],
+  "min_runtime": "1.6.640"
+}

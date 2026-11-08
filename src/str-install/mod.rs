@@ -93,6 +93,16 @@ async fn run_inner(params: &Params, rep: &Reporter) -> Result<InstallSummary, St
 
     let cc_removed = clean_creation_club(params, rep, &game_dir, &mut warnings).await;
     enable_plugins(params, rep, &data_dir).await?;
+    verify_against_manifest(
+        params,
+        rep,
+        str_version_label.as_deref(),
+        str_meta.as_ref().map(|m| m.file_id),
+        al_version.as_deref(),
+        al_meta.as_ref().map(|m| m.file_id),
+        &mut warnings,
+    )
+    .await;
     configure_platform(params, rep, &mut warnings).await?;
 
     // ---------- Persist manifest + config summary ----------
@@ -424,6 +434,82 @@ async fn clean_creation_club(
             );
         }
         Vec::new()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Manifest verification
+// ---------------------------------------------------------------------------
+
+/// Verify the freshly installed key files against the version manifest
+/// (fetched fresh when the network allows, embedded copy otherwise). A
+/// mismatch is surfaced as a warning here and as a checklist failure after
+/// the install; an unknown version is simply unverifiable.
+async fn verify_against_manifest(
+    params: &Params,
+    rep: &Reporter,
+    str_version: Option<&str>,
+    str_file_id: Option<u64>,
+    al_version: Option<&str>,
+    al_file_id: Option<u64>,
+    warnings: &mut Vec<String>,
+) {
+    let (manifest, source) = crate::manifest::latest().await;
+    rep.log(format!(
+        "Verifying installed files against the version manifest ({}).",
+        source
+    ))
+    .await;
+
+    let mut problems = Vec::new();
+    if let Some(label) = str_version {
+        if let Some(version) = crate::manifest::lookup_version(&manifest.str, label) {
+            // A version that exists in the manifest but was installed from a
+            // different Nexus file is suspicious (stale archive/wrong pick).
+            match (str_file_id, version.nexus_file_id) {
+                (Some(actual), Some(expected)) if actual != expected => {
+                    problems.push(format!(
+                        "Skyrim Together {label} was installed from Nexus file {actual}, but the                          manifest expects file {expected} for mod {}",
+                        manifest.str.nexus_mod_id
+                    ));
+                }
+                _ => {}
+            }
+            for check in crate::manifest::verify_files(version, &params.game_dir, false) {
+                problems.push(format!("Skyrim Together {label}: {check}"));
+            }
+        } else {
+            rep.log(format!("No known file hashes for Skyrim Together {label} — skipping."))
+                .await;
+        }
+    }
+    if let Some(label) = al_version {
+        if let Some(version) = crate::manifest::lookup_version(&manifest.address_library, label) {
+            match (al_file_id, version.nexus_file_id) {
+                (Some(actual), Some(expected)) if actual != expected => {
+                    problems.push(format!(
+                        "Address Library {label} was installed from Nexus file {actual}, but the                          manifest expects file {expected} for mod {}",
+                        manifest.address_library.nexus_mod_id
+                    ));
+                }
+                _ => {}
+            }
+            for check in crate::manifest::verify_files(version, &params.game_dir, false) {
+                problems.push(format!("Address Library {label}: {check}"));
+            }
+        }
+    }
+    if problems.is_empty() {
+        rep.log("Installed files match the manifest.").await;
+    } else {
+        for p in &problems {
+            rep.log(format!("⚠ {p}")).await;
+        }
+        warnings.push(format!(
+            "{} installed file(s) do not match the version manifest — the launcher's              readiness checklist will flag them. If Steam or another tool modified the \
+             game, press Install again.",
+            problems.len()
+        ));
     }
 }
 
